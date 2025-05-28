@@ -8,7 +8,7 @@
 
     import { onMount } from "svelte";
     import { themeStore } from "../lib/store/theme";
-    import "../theme.css"; 
+ 
 
     onMount(() => {
         themeStore.initTheme();

@@ -4,6 +4,7 @@
     import iconSC from "../../lib/images/full-screen-off.png";
     import hisIcon from "../../lib/images/history.png";
     import { themeStore } from "../../lib/store/theme";
+    
 
     export let selectedUser: User;
     export let onBackToList: () => void = () => {};

@@ -4,6 +4,7 @@
     import Filters from "./Filters.svelte";
     import { themeStore } from "../../lib/store/theme";
     import type { User } from "../../lib/types/type";
+    
 
     let selectedUser: User | null = null;
     let isFullscreen: boolean = false;

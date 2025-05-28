@@ -4,6 +4,7 @@
     import imgSetBg from "../../lib/images/bg-set.png";
     import darkTheme from "../../lib/images/dark-theme.png";
     import brightTheme from "../../lib/images/white-theme.png";
+    
 
     const dispatch = createEventDispatcher<{
         backgroundChange: { backgroundImage: string | null };
