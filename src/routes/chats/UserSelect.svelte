@@ -162,11 +162,7 @@
         position: relative;
     }
 
-    .initials {
-        font-size: 12px;
-        font-weight: 600;
-        color: var(--color-fff);
-    }
+    
 
     .text {
         flex: 1;
@@ -236,78 +232,5 @@
         background: var(--color-9b9ca3);
     }
 
-    /* Світла тема */
-    [data-theme="light"] .user:hover {
-        background-color: var(--color-f1f5f9);
-    }
-
-    [data-theme="light"] .user.selected {
-        background-color: var(--color-3b82f6);
-        color: var(--color-fff);
-    }
-
-    [data-theme="light"] .text h3 {
-        color: var(--color-1f2937);
-    }
-
-    [data-theme="light"] .user.selected .text h3 {
-        color: var(--color-fff);
-    }
-
-    [data-theme="light"] .status p {
-        color: var(--color-6b7280);
-    }
-
-    [data-theme="light"] .user.selected .status p {
-        color: var(--color-fff);
-    }
-
-    [data-theme="light"] .no-users p {
-        color: var(--color-6b7280);
-    }
-
-    [data-theme="light"] .block-users::-webkit-scrollbar-track {
-        background: var(--color-f9fafb);
-    }
-
-    [data-theme="light"] .block-users::-webkit-scrollbar-thumb {
-        background: var(--color-d1d5db);
-    }
-
-    [data-theme="light"] .block-users::-webkit-scrollbar-thumb:hover {
-        background: var(--color-9ca3af);
-    }
-
-    /* Темна тема */
-    [data-theme="dark"] .user:hover {
-        background-color: var(--color-232426);
-    }
-
-    [data-theme="dark"] .user.selected {
-        background-color: var(--color-530549);
-    }
-
-    [data-theme="dark"] .text h3 {
-        color: var(--color-fff);
-    }
-
-    [data-theme="dark"] .status p {
-        color: var(--color-9b9ca3);
-    }
-
-    [data-theme="dark"] .no-users p {
-        color: var(--color-9b9ca3);
-    }
-
-    [data-theme="dark"] .block-users::-webkit-scrollbar-track {
-        background: var(--color-131416);
-    }
-
-    [data-theme="dark"] .block-users::-webkit-scrollbar-thumb {
-        background: var(--color-232426);
-    }
-
-    [data-theme="dark"] .block-users::-webkit-scrollbar-thumb:hover {
-        background: var(--color-9b9ca3);
-    }
+   
 </style>

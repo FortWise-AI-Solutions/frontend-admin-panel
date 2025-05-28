@@ -3,7 +3,7 @@
 
 <head>
 	<meta charset="utf-8" />
-	
+
 	<meta name="viewport" content="width=device-width, initial-scale=1" />
 	<title>Alara Dashboard</title>
 	<link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,7 +11,7 @@
 	<link
 		href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap"
 		rel="stylesheet">
-		<link rel="stylesheet" href="../src/lib/store/theme.css">
+	<link rel="stylesheet" href="./theme.css">
 
 	%sveltekit.head%
 
@@ -33,57 +33,56 @@
 		}
 
 		/* Темна тема (за замовчуванням) */
-:root,
-[data-theme="dark"] {
-    --color-070709: #070709;
-    --color-121213: #121213;
-    --color-262629: #262629;
-    --color-530549: #530549;
-    --color-aa0795: #aa0795;
-    --color-131416: #131416;
-    --color-232426: #232426;
-    --color-8a0778: #8a0778;
-    --color-121214: #121214;
-    --color-fff: #fff;
-    --color-ffffff: #ffffff;
-    --color-9b9ca3: #9b9ca3;
-    --color-6b7280: #6b7280;
-    --color-f1f5f9: #f1f5f9;
-    --color-cbd5e1: #cbd5e1;
-    --color-94a3b8: #94a3b8;
+		:root,
+		[data-theme="dark"] {
+			--color-070709: #070709;
+			--color-121213: #121213;
+			--color-262629: #262629;
+			--color-530549: #530549;
+			--color-aa0795: #aa0795;
+			--color-131416: #131416;
+			--color-232426: #232426;
+			--color-8a0778: #8a0778;
+			--color-121214: #121214;
+			--color-fff: #fff;
+			--color-ffffff: #ffffff;
+			--color-9b9ca3: #9b9ca3;
+			--color-6b7280: #6b7280;
+			--color-f1f5f9: #f1f5f9;
+			--color-cbd5e1: #cbd5e1;
+			--color-94a3b8: #94a3b8;
 
-    --color-121211: #121211;
-    --color-0F0F0F: #0F0F0F;
-}
+			--color-121211: #121211;
+			--color-0F0F0F: #0F0F0F;
+		}
 
-/* Світла тема */
-[data-theme="light"] {
-    --color-070709: #F7F7F7;
-    --color-121213: #E7E7E9;
-    --color-262629: #453d80b2;
-    --color-530549: #453D80;
-    --color-aa0795: #8979FF;
-    --color-131416: #fff;
-    --color-232426: #D4D4D9;
-    --color-8a0778: #453D80;
-    --color-121214: #F0F0F0;
-    --color-fff: #000;
-    --color-ffffff: #000000;
-    --color-9b9ca3: #666666;
-    --color-6b7280: #4a5568;
-    --color-f1f5f9: #2d3748;
-    --color-cbd5e1: #4a5568;
-    --color-94a3b8: #718096;
+		/* Світла тема */
+		[data-theme="light"] {
+			--color-070709: #F7F7F7;
+			--color-121213: #E7E7E9;
+			--color-262629: #453d80b2;
+			--color-530549: #453D80;
+			--color-aa0795: #8979FF;
+			--color-131416: #fff;
+			--color-232426: #D4D4D9;
+			--color-8a0778: #453D80;
+			--color-121214: #F0F0F0;
+			--color-fff: #000;
+			--color-ffffff: #000000;
+			--color-9b9ca3: #666666;
+			--color-6b7280: #4a5568;
+			--color-f1f5f9: #2d3748;
+			--color-cbd5e1: #4a5568;
+			--color-94a3b8: #718096;
 
-    --color-121211: #fff;
-    --color-0F0F0F: #F7F7F7;
-}
+			--color-121211: #fff;
+			--color-0F0F0F: #F7F7F7;
+		}
 
-/* Плавні переходи для зміни тем */
-* {
-    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
-}
-
+		/* Плавні переходи для зміни тем */
+		* {
+			transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+		}
 	</style>
 </head>
 
