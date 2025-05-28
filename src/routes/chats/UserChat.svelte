@@ -3,6 +3,7 @@
     import iconFC from "../../lib/images/full-screen-on.png";
     import iconSC from "../../lib/images/full-screen-off.png";
     import hisIcon from "../../lib/images/history.png";
+    import { themeStore } from "../../lib/store/theme";
 
     export let selectedUser: User;
     export let onBackToList: () => void = () => {};
@@ -60,7 +61,6 @@
 
     // Кешування градієнтів для кожного користувача (точно така ж логіка як в UserSelect)
     const gradientCache = new Map<string, string>();
-
     function getUserGradient(userId: string): string {
         if (!gradientCache.has(userId)) {
             gradientCache.set(userId, generateGradient());
@@ -175,7 +175,6 @@
                         date: new Date().toLocaleDateString("en-US"),
                     };
                     messages = [...messages, botResponse];
-
                     setTimeout(() => {
                         if (messagesContainer) {
                             messagesContainer.scrollTop =
@@ -263,13 +262,17 @@
                 background-attachment: local;
             `;
         }
-        return "background-color: #1a1a1a;";
+        return $themeStore === "dark"
+            ? "background-color: #1a1a1a;"
+            : "background-color: #f5f5f5;";
     }
 </script>
 
 <div
     class="chat-container"
     class:fullscreen={isFullscreen}
+    class:dark={$themeStore === "dark"}
+    class:light={$themeStore === "light"}
     style={getChatBackgroundStyle()}
 >
     <!-- Header чату -->
@@ -295,7 +298,6 @@
                 />
             </svg>
         </button>
-
         <div class="user-info">
             <div class="user-details">
                 <h2>{selectedUser.nickname}</h2>
@@ -313,7 +315,6 @@
                 </div>
             </div>
         </div>
-
         <div class="header-actions">
             <div class="platform-badge">
                 {selectedUser.platform}
@@ -360,12 +361,10 @@
                             )}"
                         ></div>
                     {/if}
-
                     <div class="message-content">
                         <p>{message.text}</p>
                         <span class="timestamp">{message.timestamp}</span>
                     </div>
-
                     <!-- Аватар справа для повідомлень користувача -->
                     {#if message.sender === "user"}
                         <div class="avatar user-avatar"></div>
@@ -429,7 +428,12 @@
 
 <!-- Панель історії -->
 {#if showHistory}
-    <div class="history-panel" class:show={showHistory}>
+    <div
+        class="history-panel"
+        class:show={showHistory}
+        class:dark={$themeStore === "dark"}
+        class:light={$themeStore === "light"}
+    >
         <div class="history-header">
             <button
                 class="alara-toggle-button"
@@ -454,7 +458,6 @@
                 </svg>
             </button>
         </div>
-
         <div class="history-content">
             <div style="display: flex; align-items: flex-start; gap: 8px;">
                 <h3>Chat History</h3>
@@ -464,7 +467,6 @@
                     style="width: 16px; height: 16px; margin-top: 2px;"
                 />
             </div>
-
             {#each Object.entries(groupedMessages) as [date, msgs]}
                 <div class="date-group">
                     <div class="date-header">{date}</div>
@@ -495,7 +497,13 @@
     >
         <!-- svelte-ignore a11y-click-events-have-key-events -->
         <!-- svelte-ignore a11y-no-static-element-interactions -->
-        <div class="modal-content" on:click|stopPropagation role="document">
+        <div
+            class="modal-content"
+            class:dark={$themeStore === "dark"}
+            class:light={$themeStore === "light"}
+            on:click|stopPropagation
+            role="document"
+        >
             <h3>
                 {confirmAction === "disable"
                     ? "Stop Alara for this chat?"
@@ -515,7 +523,6 @@
                         ? "Yes, turn off"
                         : "Yes, turn on"}
                 </button>
-                
             </div>
         </div>
     </div>
@@ -525,11 +532,23 @@
     .chat-container {
         display: flex;
         flex-direction: column;
-        color: #fff;
         flex: 1;
         position: relative;
         background-size: contain;
         background-position: center center;
+        transition:
+            background-color 0.3s ease,
+            color 0.3s ease;
+    }
+
+    /* Темна тема */
+    .chat-container.dark {
+        color: #fff;
+    }
+
+    /* Світла тема */
+    .chat-container.light {
+        color: #1a1a1a;
     }
 
     /* Додаємо overlay для кращої читабельності тексту на зображеннях */
@@ -540,9 +559,17 @@
         left: 0;
         right: 0;
         bottom: 0;
-        background: rgba(0, 0, 0, 0.4);
         pointer-events: none;
         z-index: 0;
+        transition: background 0.3s ease;
+    }
+
+    .chat-container.dark::before {
+        background: rgba(0, 0, 0, 0.4);
+    }
+
+    .chat-container.light::before {
+        background: rgba(255, 255, 255, 0.4);
     }
 
     /* Забезпечуємо, що весь контент знаходиться поверх overlay */
@@ -567,22 +594,47 @@
         align-items: center;
         gap: 16px;
         padding: 16px 20px;
-        border-bottom: 1px solid #3b3b3b;
+        border-bottom: 1px solid;
+        transition:
+            background-color 0.3s ease,
+            border-color 0.3s ease;
+    }
+
+    .chat-container.dark .chat-header {
+        border-bottom-color: #3b3b3b;
         background-color: #070709;
+    }
+
+    .chat-container.light .chat-header {
+        border-bottom-color: #e5e5e5;
+        background-color: #f9f9fb !important;
     }
 
     .back-button {
         background: none;
         border: none;
-        color: #fff;
         cursor: pointer;
         padding: 8px;
         border-radius: 4px;
-        transition: background-color 0.2s ease;
+        transition:
+            background-color 0.2s ease,
+            color 0.3s ease;
     }
 
-    .back-button:hover {
+    .chat-container.dark .back-button {
+        color: #fff;
+    }
+
+    .chat-container.light .back-button {
+        color: #1a1a1a;
+    }
+
+    .chat-container.dark .back-button:hover {
         background-color: #444;
+    }
+
+    .chat-container.light .back-button:hover {
+        background-color: #f0f0f0;
     }
 
     .user-info {
@@ -613,7 +665,15 @@
         margin: 0;
         font-size: 16px;
         font-weight: 500;
+        transition: color 0.3s ease;
+    }
+
+    .chat-container.dark .user-details h2 {
         color: #fff;
+    }
+
+    .chat-container.light .user-details h2 {
+        color: #1a1a1a;
     }
 
     .status {
@@ -625,7 +685,15 @@
 
     .status-text {
         font-size: 12px;
+        transition: color 0.3s ease;
+    }
+
+    .chat-container.dark .status-text {
         color: #9b9ca3;
+    }
+
+    .chat-container.light .status-text {
+        color: #6b7280;
     }
 
     .status-indicator {
@@ -642,29 +710,55 @@
     }
 
     .platform-badge {
-        border: 1px solid #2b2b2b;
+        border: 1px solid;
         border-radius: 4px;
-        color: #fff;
         padding: 4px 8px;
         font-size: 12px;
         font-weight: 500;
+        transition:
+            border-color 0.3s ease,
+            color 0.3s ease;
+    }
+
+    .chat-container.dark .platform-badge {
+        border-color: #2b2b2b;
+        color: #fff;
+    }
+
+    .chat-container.light .platform-badge {
+        border-color: #d1d5db;
+        color: #1a1a1a;
     }
 
     .fullscreen-button {
         background: none;
         border: none;
-        color: #fff;
         cursor: pointer;
         padding: 8px;
         border-radius: 4px;
-        transition: background-color 0.2s ease;
+        transition:
+            background-color 0.2s ease,
+            color 0.3s ease;
         display: flex;
         align-items: center;
         justify-content: center;
     }
 
-    .fullscreen-button:hover {
+    .chat-container.dark .fullscreen-button {
+        color: #fff;
+    }
+
+    .chat-container.light .fullscreen-button {
+        color: #1a1a1a;
+        background-color: #9d97c4;
+    }
+
+    .chat-container.dark .fullscreen-button:hover {
         background-color: #444;
+    }
+
+    .chat-container.light .fullscreen-button:hover {
+        background-color: #453D80;
     }
 
     .chat-content {
@@ -701,19 +795,27 @@
     }
 
     .message-content {
-        background-color: #333;
         padding: 12px 16px;
         border-radius: 10px;
         position: relative;
         flex: 1;
+        transition: background-color 0.3s ease;
     }
 
-    .message.user .message-content {
+    .chat-container.dark .message.user .message-content {
         background-color: #530549;
     }
 
-    .message.bot .message-content {
+    .chat-container.light .message.user .message-content {
+        background-color: #e7e5f4;
+    }
+
+    .chat-container.dark .message.bot .message-content {
         background-color: #2a2a2a;
+    }
+
+    .chat-container.light .message.bot .message-content {
+        background-color: #f3f4f6;
     }
 
     .message-content p {
@@ -722,13 +824,30 @@
         line-height: 1.4;
         margin-bottom: 4px;
         word-wrap: break-word;
+        transition: color 0.3s ease;
+    }
+
+    .chat-container.dark .message-content p {
+        color: #fff;
+    }
+
+    .chat-container.light .message-content p {
+        color: #1a1a1a;
     }
 
     .timestamp {
         font-size: 11px;
-        color: #9b9ca3;
         display: block;
         text-align: right;
+        transition: color 0.3s ease;
+    }
+
+    .chat-container.dark .timestamp {
+        color: #9b9ca3;
+    }
+
+    .chat-container.light .timestamp {
+        color: #6b7280;
     }
 
     .message.bot .timestamp {
@@ -744,24 +863,53 @@
 
     .message-input {
         flex: 1;
-        background-color: #1a1a1a;
-        border: 1px solid #444;
+        border: 1px solid;
         border-radius: 8px;
         padding: 12px 40px;
-        color: #fff;
         font-size: 14px;
         resize: none;
         min-height: 20px;
         max-height: 100px;
+        transition:
+            background-color 0.3s ease,
+            border-color 0.3s ease,
+            color 0.3s ease;
+    }
+
+    .chat-container.dark .message-input {
+        background-color: #1a1a1a;
+        border-color: #444;
+        color: #fff;
+    }
+
+    .chat-container.light .message-input {
+        background-color: #ffffff;
+        border-color: #d1d5db;
+        color: #1a1a1a;
     }
 
     .message-input:focus {
         outline: none;
+    }
+
+    .chat-container.dark .message-input:focus {
         border-color: #ffffff;
     }
 
+    .chat-container.light .message-input:focus {
+        border-color: #530549;
+    }
+
     .message-input::placeholder {
+        transition: color 0.3s ease;
+    }
+
+    .chat-container.dark .message-input::placeholder {
         color: #9b9ca3;
+    }
+
+    .chat-container.light .message-input::placeholder {
+        color: #9ca3af;
     }
 
     .send-button {
@@ -777,18 +925,8 @@
         justify-content: center;
     }
 
-    .send-button:hover:not(:disabled) {
-        background-color: #6a0660;
-    }
-
-    .send-button:disabled {
-        background-color: #333;
-        cursor: not-allowed;
-        opacity: 0.5;
-    }
-
-    .history-button {
-        background-color: #272727;
+   .chat-container.light .send-button {
+        background-color: #453d80;
         border: none;
         border-radius: 8px;
         padding: 12px;
@@ -800,14 +938,70 @@
         justify-content: center;
     }
 
-    .history-button:hover:not(:disabled) {
+    .send-button:hover:not(:disabled) {
         background-color: #6a0660;
     }
 
-    .history-button:disabled {
-        background-color: #333;
+    .chat-container.light .send-button:hover:not(:disabled) {
+        background-color: #453d80;
+    }
+
+    .send-button:disabled {
         cursor: not-allowed;
         opacity: 0.5;
+        transition: background-color 0.3s ease;
+    }
+
+    .chat-container.dark .send-button:disabled {
+        background-color: #333;
+    }
+
+    .chat-container.light .send-button:disabled {
+        background-color: #9d97c4;
+    }
+
+    .history-button {
+        border: none;
+        border-radius: 8px;
+        padding: 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .chat-container.dark .history-button {
+        background-color: #272727;
+        color: #fff;
+    }
+
+    .chat-container.light .history-button {
+        background-color: #9d97c4;
+        color: #1a1a1a;
+    }
+
+    .chat-container.light .history-button:hover:not(:disabled) {
+        background-color: #453d80;
+    }
+
+    .history-button:hover:not(:disabled) {
+        background-color: #6a0660;
+        color: #fff;
+    }
+
+    .history-button:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+        transition: background-color 0.3s ease;
+    }
+
+    .chat-container.dark .history-button:disabled {
+        background-color: #333;
+    }
+
+    .chat-container.light .history-button:disabled {
+        background-color: #d1d5db;
     }
 
     /* Панель історії */
@@ -817,12 +1011,22 @@
         right: -400px;
         width: 500px;
         height: 100%;
-        background-color: #2a2a2a;
         display: flex;
         flex-direction: column;
         z-index: 2000;
-        transition: right 0.3s ease-in-out;
+        transition:
+            right 0.3s ease-in-out,
+            background-color 0.3s ease;
         box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .history-panel.dark {
+        background-color: #2a2a2a;
+    }
+
+    .history-panel.light {
+        background-color: #f9f9fb;
+        box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
     }
 
     .history-panel.show {
@@ -835,8 +1039,20 @@
         align-items: center;
         padding: 16px;
         height: 39px;
-        border-bottom: 1px solid #3b3b3b;
+        border-bottom: 1px solid;
+        transition:
+            background-color 0.3s ease,
+            border-color 0.3s ease;
+    }
+
+    .history-panel.dark .history-header {
+        border-bottom-color: #3b3b3b;
         background-color: #070709;
+    }
+
+    .history-panel.light .history-header {
+        border-bottom-color: #e5e5e5;
+        background-color: #f9fafb;
     }
 
     .alara-toggle-button {
@@ -850,12 +1066,12 @@
     }
 
     .alara-toggle-button.enabled {
-        background-color: #530505;
+        background-color: #e00909;
         color: #fff;
     }
 
     .alara-toggle-button.disabled {
-        background-color: #095305;
+        background-color: #068100;
         color: #fff;
     }
 
@@ -866,16 +1082,28 @@
     .close-history-button {
         background: none;
         border: none;
-        color: #9b9ca3;
         cursor: pointer;
         padding: 4px;
         border-radius: 4px;
         transition: all 0.2s ease;
     }
 
-    .close-history-button:hover {
+    .history-panel.dark .close-history-button {
+        color: #9b9ca3;
+    }
+
+    .history-panel.light .close-history-button {
+        color: #6b7280;
+    }
+
+    .history-panel.dark .close-history-button:hover {
         background-color: #444;
         color: #fff;
+    }
+
+    .history-panel.light .close-history-button:hover {
+        background-color: #f0f0f0;
+        color: #1a1a1a;
     }
 
     .history-content {
@@ -887,7 +1115,15 @@
     .history-content h3 {
         margin: 0 0 16px 0;
         font-size: 16px;
+        transition: color 0.3s ease;
+    }
+
+    .history-panel.dark .history-content h3 {
         color: #fff;
+    }
+
+    .history-panel.light .history-content h3 {
+        color: #1a1a1a;
     }
 
     .date-group {
@@ -896,31 +1132,67 @@
 
     .date-header {
         font-size: 12px;
-        color: #cecece;
         margin-bottom: 16px;
         padding-bottom: 4px;
-        border-bottom: 1px solid #3b3b3b;
+        border-bottom: 1px solid;
+        transition:
+            color 0.3s ease,
+            border-color 0.3s ease;
+    }
+
+    .history-panel.dark .date-header {
+        color: #cecece;
+        border-bottom-color: #3b3b3b;
+    }
+
+    .history-panel.light .date-header {
+        color: #6b7280;
+        border-bottom-color: #e5e5e5;
     }
 
     .history-message {
         margin-bottom: 12px;
         padding: 8px 12px;
-        background-color: #1a1a1a;
         border-radius: 6px;
+        transition: background-color 0.3s ease;
+    }
+
+    .history-panel.dark .history-message {
+        background-color: #1a1a1a;
+    }
+
+    .history-panel.light .history-message {
+        background-color: #e6e6e6;
     }
 
     .history-timestamp {
         font-size: 10px;
-        color: #9b9ca3;
         display: block;
         margin-bottom: 4px;
+        transition: color 0.3s ease;
+    }
+
+    .history-panel.dark .history-timestamp {
+        color: #9b9ca3;
+    }
+
+    .history-panel.light .history-timestamp {
+        color: #6b7280;
     }
 
     .history-text {
         margin: 0;
         font-size: 13px;
         line-height: 1.4;
+        transition: color 0.3s ease;
+    }
+
+    .history-panel.dark .history-text {
         color: #fff;
+    }
+
+    .history-panel.light .history-text {
+        color: #1a1a1a;
     }
 
     /* Модальне вікно */
@@ -939,27 +1211,55 @@
     }
 
     .modal-content {
-        background-color: #131416;
         padding: 24px;
         border-radius: 12px;
         max-width: 400px;
-        
         width: 90%;
-        border: 1px solid #3b3b3b;
+        border: 1px solid;
         box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        transition:
+            background-color 0.3s ease,
+            border-color 0.3s ease;
+    }
+
+    .modal-content.dark {
+        background-color: #131416;
+        border-color: #3b3b3b;
+    }
+
+    .modal-content.light {
+        background-color: #ffffff;
+        border-color: #e5e5e5;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
     }
 
     .modal-content h3 {
         margin: 0 0 12px 0;
         font-size: 18px;
+        transition: color 0.3s ease;
+    }
+
+    .modal-content.dark h3 {
         color: #fff;
+    }
+
+    .modal-content.light h3 {
+        color: #1a1a1a;
     }
 
     .modal-content p {
         margin: 0 0 20px 0;
         font-size: 14px;
-        color: #9b9ca3;
         line-height: 1.4;
+        transition: color 0.3s ease;
+    }
+
+    .modal-content.dark p {
+        color: #9b9ca3;
+    }
+
+    .modal-content.light p {
+        color: #6b7280;
     }
 
     .modal-actions {
@@ -985,18 +1285,36 @@
     }
 
     .cancel-button {
-        background-color: #232426;
-        color: #fff;
-        border: #35363A 1px solid;
+        border: 1px solid;
         padding: 10px 20px;
         border-radius: 6px;
         font-size: 14px;
         cursor: pointer;
-        transition: background-color 0.2s ease;
+        transition:
+            background-color 0.2s ease,
+            border-color 0.3s ease,
+            color 0.3s ease;
     }
 
-    .cancel-button:hover {
+    .modal-content.dark .cancel-button {
+        background-color: #232426;
+        color: #fff;
+        border-color: #35363a;
+    }
+
+    .modal-content.light .cancel-button {
+        background-color: #EEEEF0;
+        color: #374151;
+        border-color: #d1d5db;
+    }
+
+    .modal-content.dark .cancel-button:hover {
         background-color: #555;
+    }
+
+    .modal-content.light .cancel-button:hover {
+        background-color: #e73131;
+        color: #fff;
     }
 
     @keyframes fadeIn {
@@ -1018,93 +1336,54 @@
 
     .messages-container::-webkit-scrollbar-track,
     .history-content::-webkit-scrollbar-track {
-        background: #2a2a2a;
         border-radius: 3px;
+        transition: background 0.3s ease;
+    }
+
+    .chat-container.dark .messages-container::-webkit-scrollbar-track,
+    .history-panel.dark .history-content::-webkit-scrollbar-track {
+        background: #2a2a2a;
+    }
+
+    .chat-container.light .messages-container::-webkit-scrollbar-track,
+    .history-panel.light .history-content::-webkit-scrollbar-track {
+        background: #f3f4f6;
     }
 
     .messages-container::-webkit-scrollbar-thumb,
     .history-content::-webkit-scrollbar-thumb {
-        background: #444;
         border-radius: 3px;
+        transition: background 0.3s ease;
+    }
+
+    .chat-container.dark .messages-container::-webkit-scrollbar-thumb,
+    .history-panel.dark .history-content::-webkit-scrollbar-thumb {
+        background: #444;
+    }
+
+    .chat-container.light .messages-container::-webkit-scrollbar-thumb,
+    .history-panel.light .history-content::-webkit-scrollbar-thumb {
+        background: #d1d5db;
     }
 
     .messages-container::-webkit-scrollbar-thumb:hover,
     .history-content::-webkit-scrollbar-thumb:hover {
+        transition: background 0.3s ease;
+    }
+
+    .chat-container.dark .messages-container::-webkit-scrollbar-thumb:hover,
+    .history-panel.dark .history-content::-webkit-scrollbar-thumb:hover {
         background: #555;
+    }
+
+    .chat-container.light .messages-container::-webkit-scrollbar-thumb:hover,
+    .history-panel.light .history-content::-webkit-scrollbar-thumb:hover {
+        background: #9ca3af;
     }
 
     .user-avatar {
         background-image: url("../../lib/images/alara.png");
         background-position: center;
         background-size: cover;
-    }
-
-    /* Адаптивність */
-    @media (max-width: 768px) {
-        .chat-header {
-            padding: 12px 16px;
-        }
-
-        .header-actions {
-            gap: 8px;
-        }
-
-        .platform-badge {
-            display: none;
-        }
-
-        .message {
-            max-width: 85%;
-        }
-
-        .messages-container {
-            padding: 16px;
-        }
-
-        .message-input-container {
-            padding: 12px 16px;
-        }
-
-        .history-panel {
-            width: 100%;
-            right: -100%;
-        }
-
-        .history-panel.show {
-            right: 0;
-        }
-    }
-
-    @media (max-width: 480px) {
-        .messages-container {
-            padding: 12px;
-        }
-
-        .message-input-container {
-            padding: 8px 12px;
-        }
-
-        .message-input {
-            padding: 10px 16px;
-        }
-
-        .send-button,
-        .history-button {
-            padding: 10px;
-        }
-
-        .modal-content {
-            margin: 16px;
-            padding: 20px;
-        }
-
-        .modal-actions {
-            flex-direction: column;
-        }
-
-        .confirm-button,
-        .cancel-button {
-            width: 100%;
-        }
     }
 </style>

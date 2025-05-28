@@ -1,5 +1,6 @@
 <script lang="ts">
-     import type { User } from '../../lib/types/type';
+    import { themeStore } from '../../lib/store/theme';
+    import type { User } from '../../lib/types/type';
     
     export let users: User[] = [];
     export let selectedUserId: string | null = null;
@@ -48,14 +49,7 @@
         return gradientCache.get(userId)!;
     }
 
-    // Отримання ініціалів з нікнейму
-    function getInitials(nickname: string): string {
-        return nickname
-            .split(" ")
-            .map((word: string) => word.charAt(0).toUpperCase())
-            .slice(0, 2)
-            .join("");
-    }
+   
 
     // Обробка вибору користувача
     function handleUserSelect(user: User): void {
@@ -102,7 +96,7 @@
                     class="avatar"
                     style="background: {getUserGradient(user.id)}"
                 >
-                    
+                  
                 </div>
                 <div class="text">
                     <h3>{user.nickname}</h3>
@@ -140,17 +134,21 @@
         border: 2px solid transparent;
     }
 
+    .user:hover {
+        background-color: var(--color-232426);
+    }
+
     .user.selected {
-        background-color: #530549;
-        color: white;
+        background-color: var(--color-530549);
+        color: #fff;
     }
 
     .user.selected h3 {
-        color: white;
+        color: #fff;
     }
 
     .user.selected .status p {
-        color: rgba(255, 255, 255, 0.9);
+        color: #fff;
     }
 
     .avatar {
@@ -164,7 +162,11 @@
         position: relative;
     }
 
-
+    .initials {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--color-fff);
+    }
 
     .text {
         flex: 1;
@@ -175,7 +177,7 @@
         margin: 0;
         font-size: 14px;
         font-weight: 400;
-        color: #ffffff;
+        color: var(--color-fff);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -191,7 +193,7 @@
     .status p {
         margin: 0;
         font-size: 12px;
-        color: #9b9ca3;
+        color: var(--color-9b9ca3);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -211,7 +213,7 @@
 
     .no-users p {
         margin: 0;
-        color: #6b7280;
+        color: var(--color-9b9ca3);
         font-size: 16px;
     }
 
@@ -221,16 +223,91 @@
     }
 
     .block-users::-webkit-scrollbar-track {
-        background: #f1f5f9;
+        background: var(--color-131416);
         border-radius: 3px;
     }
 
     .block-users::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
+        background: var(--color-232426);
         border-radius: 3px;
     }
 
     .block-users::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
+        background: var(--color-9b9ca3);
+    }
+
+    /* Світла тема */
+    [data-theme="light"] .user:hover {
+        background-color: var(--color-f1f5f9);
+    }
+
+    [data-theme="light"] .user.selected {
+        background-color: var(--color-3b82f6);
+        color: var(--color-fff);
+    }
+
+    [data-theme="light"] .text h3 {
+        color: var(--color-1f2937);
+    }
+
+    [data-theme="light"] .user.selected .text h3 {
+        color: var(--color-fff);
+    }
+
+    [data-theme="light"] .status p {
+        color: var(--color-6b7280);
+    }
+
+    [data-theme="light"] .user.selected .status p {
+        color: var(--color-fff);
+    }
+
+    [data-theme="light"] .no-users p {
+        color: var(--color-6b7280);
+    }
+
+    [data-theme="light"] .block-users::-webkit-scrollbar-track {
+        background: var(--color-f9fafb);
+    }
+
+    [data-theme="light"] .block-users::-webkit-scrollbar-thumb {
+        background: var(--color-d1d5db);
+    }
+
+    [data-theme="light"] .block-users::-webkit-scrollbar-thumb:hover {
+        background: var(--color-9ca3af);
+    }
+
+    /* Темна тема */
+    [data-theme="dark"] .user:hover {
+        background-color: var(--color-232426);
+    }
+
+    [data-theme="dark"] .user.selected {
+        background-color: var(--color-530549);
+    }
+
+    [data-theme="dark"] .text h3 {
+        color: var(--color-fff);
+    }
+
+    [data-theme="dark"] .status p {
+        color: var(--color-9b9ca3);
+    }
+
+    [data-theme="dark"] .no-users p {
+        color: var(--color-9b9ca3);
+    }
+
+    [data-theme="dark"] .block-users::-webkit-scrollbar-track {
+        background: var(--color-131416);
+    }
+
+    [data-theme="dark"] .block-users::-webkit-scrollbar-thumb {
+        background: var(--color-232426);
+    }
+
+    [data-theme="dark"] .block-users::-webkit-scrollbar-thumb:hover {
+        background: var(--color-9b9ca3);
     }
 </style>

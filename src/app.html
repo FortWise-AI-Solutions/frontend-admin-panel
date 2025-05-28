@@ -3,7 +3,7 @@
 
 <head>
 	<meta charset="utf-8" />
-	<link rel="icon" href="%sveltekit.assets%/favicon.png" />
+	<link rel="icon" href="./lib/images/fav.png" />
 	<meta name="viewport" content="width=device-width, initial-scale=1" />
 	<title>Alara Dashboard</title>
 	<link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,6 +11,7 @@
 	<link
 		href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap"
 		rel="stylesheet">
+		<link rel="stylesheet" href="../src/lib/store/theme.css">
 
 	%sveltekit.head%
 
@@ -19,7 +20,7 @@
 		body {
 			margin: 0;
 			padding: 0;
-			background-color: #070709;
+			background-color: var(--color-070709);
 			color: #ffffff;
 			min-height: 100vh;
 			width: 100%;

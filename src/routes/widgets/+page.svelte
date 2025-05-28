@@ -10,7 +10,7 @@
 
 <style>
     .wid-container {
-        color: #fff;
+        color: var(--color-fff);
         padding-top: 4.2%;
         padding-left: 5%;
     }
@@ -22,7 +22,7 @@
 
     .chat-list p {
         font-size: 14px;
-        color: #9b9ca3;
+        color: var(--color-9b9ca3);
         margin-top: 25px;
         font-weight: 500;
     }

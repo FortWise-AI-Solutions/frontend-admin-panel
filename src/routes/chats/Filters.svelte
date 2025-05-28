@@ -9,7 +9,6 @@
 
     type Platform = "WhatsApp" | "Telegram" | "Instagram" | null;
     type Status = "Online" | "Offline" | "Human Required" | null;
-
     type User = {
         id: string;
         nickname: string;
@@ -17,7 +16,6 @@
         platform: "WhatsApp" | "Telegram" | "Instagram";
     };
 
-    // Експорт функції для передачі вибору користувача
     export let onUserSelect: (user: User) => void = () => {};
 
     let activePlatform: Platform = null;
@@ -129,7 +127,6 @@
     $: activeFiltersCount = (activePlatform ? 1 : 0) + (activeStatus ? 1 : 0);
 </script>
 
-<!-- Решта HTML коду залишається без змін -->
 <div class="filters">
     <div class="filter-hdr">
         <h1>Filters</h1>
@@ -202,25 +199,25 @@
     </div>
 </div>
 
-
 <style>
     .filters {
         width: 100%;
         max-width: 300px;
         padding: 12px;
         padding-top: 2%;
-        border-right: #3b3b3b 1px solid;
+        border-right: 1px solid var(--color-232426);
         font-family: "Inter", sans-serif;
         overflow-y: auto;
+        background-color: var(--color-070709);
     }
 
     .filter-hdr {
-        background-color: #121213;
-        border: 1px solid #2b2b2b;
+        background-color: var(--color-121213);
+        border: 1px solid var(--color-232426);
         text-align: center;
         padding: 8px;
         border-radius: 12px;
-        color: white;
+        color: var(--color-fff);
         position: relative;
         display: flex;
         align-items: center;
@@ -233,11 +230,12 @@
         font-size: 14px;
         font-weight: 400;
         margin: 0;
+        color: var(--color-fff);
     }
 
     .clear-filters {
-        background: #530505;
-        color: white;
+        background: #e00909;
+        color: #fff;
         border: none;
         padding: 4px 8px;
         border-radius: 4px;
@@ -247,7 +245,7 @@
     }
 
     .clear-filters:hover {
-        background: #c42424;
+         background: #af0000;
     }
 
     .filters-block {
@@ -269,7 +267,7 @@
     }
 
     .block-title span {
-        color: #9b9ca3;
+        color: var(--color-9b9ca3);
         font-size: 11px;
         font-weight: 500;
         text-transform: uppercase;
@@ -292,27 +290,15 @@
     }
 
     .block-content:hover {
-        background-color: rgba(255, 255, 255, 0.05);
+        background-color: var(--color-232426);
     }
 
-    /* .block-content.active {
-       background-color: #530549; 
-    }
+  
 
-    .block-content.active::before {
-        content: "";
-        position: absolute;
-        left: 0;
-        top: 50%;
-        transform: translateY(-50%);
-        width: 3px;
-        height: 20px;
-       background-color: #4de944;
-        border-radius: 0 2px 2px 0;
-    }*/
+
 
     .block-img {
-        background-color: #121213;
+        background-color: var(--color-121213);
         border-radius: 6px;
         width: 26px;
         height: 26px;
@@ -322,9 +308,7 @@
         transition: background-color 0.2s ease;
     }
 
-    .block-content.active .block-img {
-        background-color: rgba(255, 255, 255, 0.1);
-    }
+ 
 
     .block-img img {
         width: 16px;
@@ -332,7 +316,7 @@
     }
 
     .block-text {
-        color: #9b9ca3;
+        color: var(--color-9b9ca3);
         font-size: 12px;
         font-weight: 400;
         transition: color 0.2s ease;
@@ -340,7 +324,8 @@
     }
 
     .block-content.active .block-text {
-        color: #ffffff;
+        color: var(--color-ffffff);
+        
         font-weight: 500;
     }
 
@@ -357,7 +342,7 @@
     }
 
     .users-header h2 {
-        color: #ffffff;
+        color: var(--color-ffffff);
         font-size: 14px;
         font-weight: 600;
         margin: 0;
@@ -365,9 +350,9 @@
     }
 
     .filter-indicator {
-        background: #121213;
-        border: 1px solid #2b2b2b;
-        color: #ffffff;
+        background: var(--color-121213);
+        border: 1px solid var(--color-232426);
+        color: var(--color-ffffff);
         font-size: 8px;
         font-weight: 600;
         padding: 4px 6px;
@@ -382,17 +367,17 @@
     }
 
     .filters::-webkit-scrollbar-track {
-        background: #1a1a1a;
+        background: var(--color-131416);
         border-radius: 3px;
     }
 
     .filters::-webkit-scrollbar-thumb {
-        background: #3b3b3b;
+        background: var(--color-232426);
         border-radius: 3px;
     }
 
     .filters::-webkit-scrollbar-thumb:hover {
-        background: #4b4b4b;
+        background: var(--color-9b9ca3);
     }
 
     /* Адаптивність */
@@ -400,7 +385,7 @@
         .filters {
             max-width: 100%;
             border-right: none;
-            border-bottom: #3b3b3b 1px solid;
+            border-bottom: 1px solid var(--color-232426);
         }
 
         .filters-block {

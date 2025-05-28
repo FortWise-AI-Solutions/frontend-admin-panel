@@ -2,7 +2,7 @@
     import { onMount } from "svelte";
     import { fade, fly } from "svelte/transition";
     import { goto } from "$app/navigation";
-
+    
     let email = "";
     let password = "";
     let isLoading = false;
@@ -21,18 +21,15 @@
             await new Promise((resolve) => setTimeout(resolve, 1000));
             localStorage.setItem("user", JSON.stringify({ email }));
             showWelcome = true;
-
             setTimeout(() => {
                 showModal = false;
             }, 500);
-
             setTimeout(() => {
                 showWelcome = false;
                 setTimeout(() => {
                     goto("/chats");
                 }, 600);
             }, 5000);
-
         } catch (error) {
             errorMessage = "Authentication failed. Please check your credentials.";
             console.error("Login error:", error);
@@ -102,7 +99,7 @@
         display: flex;
         flex-direction: column;
         justify-content: center;
-        color: #fff;
+        color: var(--color-fff);
     }
 
     input {
@@ -111,15 +108,22 @@
         padding-left: 18px;
         padding-right: 18px;
         border-radius: 6px;
-        background-color: #0f0f0f;
+        background-color: var(--color-0F0F0F);
         border: none;
         margin-top: 12px;
-        color: #fff;
+        color: var(--color-fff);
+        transition: border-color 0.2s ease, background-color 0.2s ease;
+    }
+
+    input:focus {
+        outline: none;
+        border-color: var(--color-530549);
     }
 
     label {
         font-size: 16px;
         font-weight: 500;
+        color: var(--color-fff);
     }
 
     img {
@@ -133,7 +137,7 @@
     button {
         margin-top: 30px;
         max-height: 76px;
-        background-color: #530549;
+        background-color: var(--color-530549);
         color: #fff;
         font-size: 24px;
         padding: 24px;
@@ -145,16 +149,16 @@
     }
 
     button:hover:not(:disabled) {
-        background-color: #6b055f;
+        background-color: var(--color-8a0778);
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     }
 
     button.valid-form {
-        background-color: #aa0795;
+        background-color: var(--color-aa0795);
     }
 
     button.valid-form:hover:not(:disabled) {
-        background-color: #c208ab;
+        background-color: var(--color-8a0778);
         box-shadow: 0 4px 12px rgba(170, 7, 149, 0.4);
     }
 
@@ -169,7 +173,7 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background-color: #070709;
+        background-color: var(--color-070709);
         display: flex;
         justify-content: center;
         align-items: center;
@@ -177,12 +181,13 @@
     }
 
     .modal-content {
-        background-color: #121213;
+        background-color: var(--color-121211);
         padding: 2rem;
         border-radius: 8px;
         width: 90%;
         max-width: 400px;
         position: relative;
+        border: 1px solid var(--color-232426);
     }
 
     .error-message {
@@ -192,6 +197,7 @@
         border-radius: 4px;
         margin-bottom: 15px;
         text-align: center;
+        border: 1px solid rgba(255, 107, 107, 0.3);
     }
 
     .welcome-container {
@@ -200,7 +206,7 @@
         align-items: center;
         height: 100%;
         width: 100%;
-        background: #070709;
+        background: var(--color-070709);
         position: fixed;
         top: 0;
         left: 0;
@@ -219,7 +225,7 @@
         display: flex;
         align-items: center;
         font-weight: 700;
-        background: linear-gradient(120deg, #ffffff 0%, #ffffff 100%);
+        background: linear-gradient(120deg, var(--color-fff) 0%, var(--color-fff) 100%);
         background-size: 200% auto;
         background-clip: text;
         -webkit-background-clip: text;
@@ -229,6 +235,262 @@
             disappear 2s ease-in-out 3.5s forwards;
         white-space: nowrap;
         transition: transform 0.4s ease, opacity 0.4s ease;
+        margin: 0;
+    }
+
+    /* Світла тема */
+    [data-theme="light"] .modal-backdrop {
+        background-color: var(--color-f8f9fa);
+    }
+
+    [data-theme="light"] .modal-content {
+        background-color: var(--color-fff);
+        border-color: var(--color-e9ecef);
+    }
+
+    [data-theme="light"] form {
+        color: var(--color-1f2937);
+    }
+
+    [data-theme="light"] label {
+        color: var(--color-1f2937);
+    }
+
+    [data-theme="light"] input {
+        background-color: var(--color-f8f9fa);
+        border-color: var(--color-e9ecef);
+        color: var(--color-1f2937);
+    }
+
+    [data-theme="light"] input:focus {
+        border-color: var(--color-3b82f6);
+    }
+
+    [data-theme="light"] button {
+        background-color: var(--color-3b82f6);
+    }
+
+    [data-theme="light"] button:hover:not(:disabled) {
+        background-color: var(--color-2563eb);
+        box-shadow: 0 4px 8px rgba(59, 130, 246, 0.2);
+    }
+
+    [data-theme="light"] button.valid-form {
+        background-color: var(--color-1d4ed8);
+    }
+
+    [data-theme="light"] button.valid-form:hover:not(:disabled) {
+        background-color: var(--color-1e40af);
+        box-shadow: 0 4px 12px rgba(29, 78, 216, 0.4);
+    }
+
+    [data-theme="light"] .welcome-container {
+        background: var(--color-f8f9fa);
+    }
+
+    [data-theme="light"] .welcome-text {
+        background: linear-gradient(120deg, var(--color-1f2937) 0%, var(--color-1f2937) 100%);
+        background-clip: text;
+        -webkit-background-clip: text;
+    }
+
+    /* Темна тема */
+    [data-theme="dark"] .modal-backdrop {
+        background-color: var(--color-070709);
+    }
+
+    [data-theme="dark"] .modal-content {
+        background-color: var(--color-121213);
+        border-color: var(--color-232426);
+    }
+
+    [data-theme="dark"] form {
+        color: var(--color-fff);
+    }
+
+    [data-theme="dark"] label {
+        color: var(--color-fff);
+    }
+
+    [data-theme="dark"] input {
+        background-color: var(--color-0f0f0f);
+        border-color: var(--color-232426);
+        color: var(--color-fff);
+    }
+
+    [data-theme="dark"] input:focus {
+        border-color: var(--color-530549);
+    }
+
+    [data-theme="dark"] button {
+        background-color: var(--color-530549);
+    }
+
+    [data-theme="dark"] button:hover:not(:disabled) {
+        background-color: var(--color-6b055f);
+    }
+
+    [data-theme="dark"] button.valid-form {
+        background-color: var(--color-aa0795);
+    }
+
+    [data-theme="dark"] button.valid-form:hover:not(:disabled) {
+        background-color: var(--color-c208ab);
+    }
+
+    [data-theme="dark"] .welcome-container {
+        background: var(--color-070709);
+    }
+
+    [data-theme="dark"] .welcome-text {
+        background: linear-gradient(120deg, var(--color-fff) 0%, var(--color-fff) 100%);
+        background-clip: text;
+        -webkit-background-clip: text;
+    }
+
+    /* Адаптивність для ноутбуків */
+    @media (max-width: 1366px) {
+        .modal-content {
+            max-width: 380px;
+            padding: 1.8rem;
+        }
+
+        img {
+            max-width: 220px;
+            max-height: 220px;
+        }
+
+        .form-group {
+            margin-top: 25px;
+        }
+
+        input {
+            height: 70px;
+            font-size: 20px;
+            padding-left: 16px;
+            padding-right: 16px;
+        }
+
+        button {
+            font-size: 22px;
+            padding: 22px;
+            margin-top: 25px;
+        }
+
+        .welcome-text {
+            font-size: 28px;
+        }
+    }
+
+    @media (max-width: 1024px) {
+        .modal-content {
+            max-width: 350px;
+            padding: 1.5rem;
+        }
+
+        img {
+            max-width: 200px;
+            max-height: 200px;
+        }
+
+        .form-group {
+            margin-top: 20px;
+        }
+
+        input {
+            height: 65px;
+            font-size: 18px;
+            padding-left: 14px;
+            padding-right: 14px;
+        }
+
+        button {
+            font-size: 20px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .welcome-text {
+            font-size: 26px;
+        }
+    }
+
+    /* Адаптивність для планшетів */
+    @media (max-width: 768px) {
+        .modal-content {
+            max-width: 320px;
+            padding: 1.2rem;
+        }
+
+        img {
+            max-width: 180px;
+            max-height: 180px;
+        }
+
+        .form-group {
+            margin-top: 18px;
+        }
+
+        input {
+            height: 60px;
+            font-size: 16px;
+            padding-left: 12px;
+            padding-right: 12px;
+        }
+
+        label {
+            font-size: 14px;
+        }
+
+        button {
+            font-size: 18px;
+            padding: 18px;
+            margin-top: 18px;
+        }
+
+        .welcome-text {
+            font-size: 24px;
+            letter-spacing: 1.5px;
+        }
+    }
+
+    /* Адаптивність для мобільних */
+    @media (max-width: 480px) {
+        .modal-content {
+            max-width: 280px;
+            padding: 1rem;
+        }
+
+        img {
+            max-width: 150px;
+            max-height: 150px;
+        }
+
+        .form-group {
+            margin-top: 15px;
+        }
+
+        input {
+            height: 55px;
+            font-size: 14px;
+            padding-left: 10px;
+            padding-right: 10px;
+        }
+
+        label {
+            font-size: 13px;
+        }
+
+        button {
+            font-size: 16px;
+            padding: 16px;
+            margin-top: 15px;
+        }
+
+        .welcome-text {
+            font-size: 20px;
+            letter-spacing: 1px;
+        }
     }
 
     @keyframes appear {

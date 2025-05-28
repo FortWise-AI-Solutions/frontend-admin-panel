@@ -1,5 +1,4 @@
-<script>
-</script>
+<script></script>
 
 <div class="analyt-container">
     <h1>Your Analytics</h1>
@@ -9,7 +8,6 @@
             clients
         </p>
     </div>
-
     <div class="analyt-data">
         <div class="block">
             <div class="img-bg-1">
@@ -19,7 +17,6 @@
                 <p>Average time to respond</p>
             </div>
         </div>
-
         <div class="block">
             <div class="img-bg-2">
                 <h2>100%</h2>
@@ -33,21 +30,25 @@
 
 <style>
     .analyt-container {
-        color: #fff;
+        color: var(--color-fff);
         padding-top: 4.2%;
         padding-left: 5%;
+        background-color: var(--color-070709);
+        min-height: 100vh;
     }
 
     h1 {
         font-size: 30px;
-        font-weight: 500px;
+        color: var(--color-fff);
+        margin: 0;
     }
 
     .chat-list p {
         font-size: 14px;
-        color: #9b9ca3;
+        color: var(--color-9b9ca3);
         margin-top: 25px;
         font-weight: 500;
+        margin-bottom: 0;
     }
 
     .analyt-data {
@@ -60,7 +61,8 @@
         border-radius: 20px;
         width: 450px;
         height: 420px;
-        background-color: #121213;
+        background-color: var(--color-121213);
+        transition: background-color 0.2s ease;
     }
 
     .img-bg-1 {
@@ -96,8 +98,242 @@
         align-items: center;
     }
 
+    .text-bm p {
+        color: var(--color-fff);
+        margin: 0;
+    }
+
     h2 {
         font-size: 36px;
         font-weight: 500;
+        color: #fff;
+        margin: 0;
+    }
+
+    /* Світла тема */
+    [data-theme="light"] .analyt-container {
+        background-color: var(--color-fff);
+        color: var(--color-1f2937);
+    }
+
+    [data-theme="light"] h1 {
+        color: var(--color-1f2937);
+    }
+
+    [data-theme="light"] .chat-list p {
+        color: var(--color-6b7280);
+    }
+
+    [data-theme="light"] .block {
+        background-color: var(--color-f8f9fa);
+        border: 1px solid var(--color-e9ecef);
+    }
+
+    [data-theme="light"] .text-bm p {
+        color: var(--color-1f2937);
+    }
+
+    [data-theme="light"] h2 {
+        color: var(--color-fff);
+    }
+
+    /* Темна тема */
+    [data-theme="dark"] .analyt-container {
+        background-color: var(--color-070709);
+        color: var(--color-fff);
+    }
+
+    [data-theme="dark"] h1 {
+        color: var(--color-fff);
+    }
+
+    [data-theme="dark"] .chat-list p {
+        color: var(--color-9b9ca3);
+    }
+
+    [data-theme="dark"] .block {
+        background-color: var(--color-121213);
+    }
+
+    [data-theme="dark"] .text-bm p {
+        color: var(--color-fff);
+    }
+
+    [data-theme="dark"] h2 {
+        color: var(--color-fff);
+    }
+
+    /* Адаптивність для ноутбуків */
+    @media (max-width: 1366px) {
+        .analyt-container {
+            padding-top: 3.5%;
+            padding-left: 4%;
+        }
+
+        h1 {
+            font-size: 26px;
+        }
+
+        .chat-list p {
+            font-size: 13px;
+            margin-top: 20px;
+        }
+
+        .analyt-data {
+            margin-top: 45px;
+            gap: 50px;
+        }
+
+        .block {
+            width: 380px;
+            height: 350px;
+        }
+
+        .img-bg-1,
+        .img-bg-2 {
+            width: 380px;
+            height: 300px;
+        }
+
+        .text-bm {
+            font-size: 16px;
+            padding-left: 18px;
+            padding-top: 10px;
+        }
+
+        h2 {
+            font-size: 32px;
+        }
+    }
+
+    @media (max-width: 1024px) {
+        .analyt-container {
+            padding-top: 3%;
+            padding-left: 3%;
+            padding-right: 3%;
+        }
+
+        h1 {
+            font-size: 24px;
+        }
+
+        .chat-list p {
+            font-size: 12px;
+            margin-top: 18px;
+        }
+
+        .analyt-data {
+            margin-top: 40px;
+            gap: 30px;
+        }
+
+        .block {
+            width: 320px;
+            height: 300px;
+        }
+
+        .img-bg-1,
+        .img-bg-2 {
+            width: 320px;
+            height: 250px;
+        }
+
+        .text-bm {
+            font-size: 14px;
+            padding-left: 16px;
+            padding-top: 8px;
+        }
+
+        h2 {
+            font-size: 28px;
+        }
+    }
+
+    /* Адаптивність для планшетів */
+    @media (max-width: 768px) {
+        .analyt-container {
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 22px;
+        }
+
+        .chat-list p {
+            font-size: 12px;
+            margin-top: 15px;
+        }
+
+        .analyt-data {
+            margin-top: 30px;
+            flex-direction: column;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .block {
+            width: 100%;
+            max-width: 350px;
+            height: 280px;
+        }
+
+        .img-bg-1,
+        .img-bg-2 {
+            width: 100%;
+            height: 230px;
+        }
+
+        .text-bm {
+            font-size: 14px;
+            padding-left: 16px;
+            padding-top: 8px;
+        }
+
+        h2 {
+            font-size: 26px;
+        }
+    }
+
+    /* Адаптивність для мобільних */
+    @media (max-width: 480px) {
+        .analyt-container {
+            padding: 15px;
+        }
+
+        h1 {
+            font-size: 20px;
+        }
+
+        .chat-list p {
+            font-size: 11px;
+            margin-top: 12px;
+        }
+
+        .analyt-data {
+            margin-top: 25px;
+            gap: 15px;
+        }
+
+        .block {
+            max-width: 100%;
+            height: 250px;
+            border-radius: 15px;
+        }
+
+        .img-bg-1,
+        .img-bg-2 {
+            height: 200px;
+            border-radius: 15px;
+        }
+
+        .text-bm {
+            font-size: 12px;
+            padding-left: 12px;
+            padding-top: 6px;
+        }
+
+        h2 {
+            font-size: 22px;
+        }
     }
 </style>

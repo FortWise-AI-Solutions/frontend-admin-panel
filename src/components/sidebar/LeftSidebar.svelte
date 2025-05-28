@@ -24,7 +24,6 @@
     >
         <img src={imgChats} alt="Chats" />
     </div>
-
     <div
         class="block-bar analyt {currentPath === '/analytics' ? 'active' : ''}"
         on:click={() => navigateTo("/analytics")}
@@ -34,7 +33,6 @@
     >
         <img src={imgAnalyticss} alt="Analytics" />
     </div>
-
     <div
         class="block-bar settings {currentPath === '/widgets' ? 'active' : ''}"
         on:click={() => navigateTo("/widgets")}
@@ -44,7 +42,6 @@
     >
         <img src={imgWidget} alt="Widget" />
     </div>
-
     <div
         class="block-bar settings {currentPath === '/settings' ? 'active' : ''}"
         on:click={() => navigateTo("/settings")}
@@ -54,16 +51,6 @@
     >
         <img src={imgSettings} alt="Settings" />
     </div>
-
-    <!--  <div
-        class="block-bar widget-1 {currentPath === '/widget-1' ? 'active' : ''}"
-        on:click={() => navigateTo("/widget-1")}
-        on:keydown={(e) => e.key === "Enter" && navigateTo("/widget-1")}
-        role="button"
-        tabindex="0"
-    >
-        <img src={Widget1} alt="Search" />
-    </div>-->
 </div>
 
 <style>
@@ -73,8 +60,9 @@
         width: 100%;
         max-width: 80px;
         padding-top: 2%;
-        border-right: #3b3b3b 1px solid;
+        border-right: 1px solid var(--color-232426);
         align-items: center;
+        background-color: var(--color-070709);
     }
 
     .block-bar {
@@ -82,7 +70,7 @@
         max-width: 50px;
         height: 100%;
         max-height: 50px;
-        background-color: #121213;
+        background-color: var(--color-262629);
         border-radius: 4px;
         margin-bottom: 20px;
         display: flex;
@@ -93,15 +81,150 @@
     }
 
     .block-bar:hover {
-        background-color: #2a2a2b;
+        background-color: var(--color-232426);
     }
 
     .block-bar.active {
-        background-color: #530549;
+        background-color: var(--color-530549);
     }
 
     .block-bar img {
         width: 20px;
         height: 20px;
+    }
+
+    /* Світла тема */
+    [data-theme="light"] .sidebar {
+        background-color: var(--color-fff);
+        border-right-color: var(--color-e9ecef);
+    }
+
+    [data-theme="light"] .block-bar {
+        background-color: var(--color-f8f9fa);
+    }
+
+    [data-theme="light"] .block-bar:hover {
+        background-color: var(--color-e9ecef);
+    }
+
+    [data-theme="light"] .block-bar.active {
+        background-color: var(--color-3b82f6);
+    }
+
+    /* Темна тема */
+    [data-theme="dark"] .sidebar {
+        background-color: var(--color-070709);
+        border-right-color: var(--color-232426);
+    }
+
+    [data-theme="dark"] .block-bar {
+        background-color: var(--color-121213);
+    }
+
+    [data-theme="dark"] .block-bar:hover {
+        background-color: var(--color-232426);
+    }
+
+    [data-theme="dark"] .block-bar.active {
+        background-color: var(--color-530549);
+    }
+
+    /* Адаптивність для ноутбуків */
+    @media (max-width: 1366px) {
+        .sidebar {
+            max-width: 70px;
+            padding-top: 1.5%;
+        }
+
+        .block-bar {
+            max-width: 45px;
+            max-height: 45px;
+            margin-bottom: 16px;
+        }
+
+        .block-bar img {
+            width: 18px;
+            height: 18px;
+        }
+    }
+
+    @media (max-width: 1024px) {
+        .sidebar {
+            max-width: 60px;
+            padding-top: 1%;
+        }
+
+        .block-bar {
+            max-width: 40px;
+            max-height: 40px;
+            margin-bottom: 12px;
+        }
+
+        .block-bar img {
+            width: 16px;
+            height: 16px;
+        }
+    }
+
+    /* Адаптивність для планшетів та мобільних */
+    @media (max-width: 768px) {
+        .sidebar {
+            flex-direction: row;
+            max-width: 100%;
+            width: 100%;
+            height: auto;
+            padding: 12px;
+            border-right: none;
+            border-bottom: 1px solid var(--color-232426);
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .block-bar {
+            max-width: 40px;
+            max-height: 40px;
+            margin-bottom: 0;
+            flex-shrink: 0;
+        }
+
+        .block-bar img {
+            width: 16px;
+            height: 16px;
+        }
+
+        [data-theme="light"] .sidebar {
+            border-bottom-color: var(--color-e9ecef);
+        }
+
+        [data-theme="dark"] .sidebar {
+            border-bottom-color: var(--color-232426);
+        }
+    }
+
+    @media (max-width: 480px) {
+        .sidebar {
+            padding: 8px;
+            gap: 6px;
+        }
+
+        .block-bar {
+            max-width: 36px;
+            max-height: 36px;
+        }
+
+        .block-bar img {
+            width: 14px;
+            height: 14px;
+        }
+    }
+
+    /* Фокус для доступності */
+    .block-bar:focus {
+        outline: 2px solid var(--color-3b82f6);
+        outline-offset: 2px;
+    }
+
+    [data-theme="dark"] .block-bar:focus {
+        outline-color: var(--color-530549);
     }
 </style>

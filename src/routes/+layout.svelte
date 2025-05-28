@@ -2,10 +2,17 @@
     import { page } from "$app/stores";
     import LeftSidebar from "../components/sidebar/LeftSidebar.svelte";
     import LoginForm from "./logIn/LoginForm.svelte";
-    import Filters from "./chats/Filters.svelte";
 
     $: currentPath = $page.url.pathname;
-    $: isChatsPage = currentPath === '/chats';
+    $: isChatsPage = currentPath === "/chats";
+
+    import { onMount } from "svelte";
+    import { themeStore } from "../lib/store/theme";
+    import "../lib/store/theme.css"; // Імпортуємо глобальні стилі теми
+
+    onMount(() => {
+        themeStore.initTheme();
+    });
 </script>
 
 <div class="app">
@@ -22,9 +29,19 @@
         display: flex;
         height: 100vh;
     }
-    
+
     main {
         flex: 1;
         overflow: hidden;
     }
+
+    :global(body) {
+        margin: 0;
+        padding: 0;
+        background-color: var(--color-070709);
+        color: var(--color-fff);
+        font-family: "Inter", sans-serif;
+    }
+
+    
 </style>
