@@ -110,58 +110,7 @@
         margin: 0;
     }
 
-    /* Світла тема */
-    [data-theme="light"] .analyt-container {
-        background-color: var(--color-fff);
-        color: var(--color-1f2937);
-    }
-
-    [data-theme="light"] h1 {
-        color: var(--color-1f2937);
-    }
-
-    [data-theme="light"] .chat-list p {
-        color: var(--color-6b7280);
-    }
-
-    [data-theme="light"] .block {
-        background-color: var(--color-f8f9fa);
-        border: 1px solid var(--color-e9ecef);
-    }
-
-    [data-theme="light"] .text-bm p {
-        color: var(--color-1f2937);
-    }
-
-    [data-theme="light"] h2 {
-        color: var(--color-fff);
-    }
-
-    /* Темна тема */
-    [data-theme="dark"] .analyt-container {
-        background-color: var(--color-070709);
-        color: var(--color-fff);
-    }
-
-    [data-theme="dark"] h1 {
-        color: var(--color-fff);
-    }
-
-    [data-theme="dark"] .chat-list p {
-        color: var(--color-9b9ca3);
-    }
-
-    [data-theme="dark"] .block {
-        background-color: var(--color-121213);
-    }
-
-    [data-theme="dark"] .text-bm p {
-        color: var(--color-fff);
-    }
-
-    [data-theme="dark"] h2 {
-        color: var(--color-fff);
-    }
+    
 
     /* Адаптивність для ноутбуків */
     @media (max-width: 1366px) {
