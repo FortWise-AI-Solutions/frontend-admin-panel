@@ -2,43 +2,76 @@
     import { onMount } from "svelte";
     import { fade, fly } from "svelte/transition";
     import { goto } from "$app/navigation";
-    
-    
-    let email = "";
+    import { supabase } from "../../lib/supabaseClient";
+    import imgLogin from "../../lib/images/img-login.png";
+
+    let name = "";
     let password = "";
     let isLoading = false;
     let errorMessage = "";
     let showModal = true;
     let showWelcome = false;
 
-    $: isFormValid = email.trim() !== "" && password.trim() !== "";
+    $: isFormValid = name.trim() !== "" && password.trim() !== "";
 
     async function handleSubmit() {
         if (!isFormValid) return;
         errorMessage = "";
         isLoading = true;
 
+        const tablesToCheck = ["panel_admins", "clients", "client_users"];
+        let user = null;
+        let tableMatched = "";
+
         try {
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-            localStorage.setItem("user", JSON.stringify({ email }));
+            for (const table of tablesToCheck) {
+                console.log(`Checking table: ${table}`);
+
+                const { data, error } = await supabase
+                    .from(table)
+                    .select("*")
+                    .or(`name.eq.${name},email.eq.${name}`)
+                    .single();
+
+                if (data && !error) {
+                    console.log("User found in:", table);
+                    user = data;
+                    tableMatched = table;
+                    break;
+                }
+            }
+
+            if (!user) {
+                throw new Error("User not found.");
+            }
+
+            const passwordMatches = String(user.password) === String(password);
+
+            if (!passwordMatches) {
+                throw new Error("Incorrect password.");
+            }
+
+            localStorage.setItem(
+                "user",
+                JSON.stringify({ ...user, table: tableMatched }),
+            );
+
             showWelcome = true;
-            setTimeout(() => {
-                showModal = false;
-            }, 500);
+            setTimeout(() => (showModal = false), 500);
             setTimeout(() => {
                 showWelcome = false;
-                setTimeout(() => {
-                    goto("/chats");
-                }, 600);
+                setTimeout(() => goto("/chats"), 600);
             }, 5000);
-        } catch (error) {
-            errorMessage = "Authentication failed. Please check your credentials.";
-            console.error("Login error:", error);
+        } catch (err) {
+            errorMessage =
+                err instanceof Error
+                    ? err.message
+                    : "Login failed unexpectedly.";
+            console.error("Login error:", err);
+        } finally {
             isLoading = false;
         }
     }
-
-    import imgLogin from "../../lib/images/img-login.png";
 </script>
 
 {#if showModal}
@@ -50,15 +83,16 @@
                 {/if}
                 <img src={imgLogin} alt="Login image" />
                 <div class="form-group">
-                    <label for="email">Company Name</label>
+                    <label for="name">Company Name</label>
                     <input
-                        type="email"
-                        id="email"
-                        bind:value={email}
+                        type="text"
+                        id="name"
+                        bind:value={name}
                         required
                         disabled={isLoading}
                     />
                 </div>
+
                 <div class="form-group">
                     <label for="password">Password</label>
                     <input
@@ -113,7 +147,9 @@
         border: none;
         margin-top: 12px;
         color: var(--color-fff);
-        transition: border-color 0.2s ease, background-color 0.2s ease;
+        transition:
+            border-color 0.2s ease,
+            background-color 0.2s ease;
     }
 
     input:focus {
@@ -226,7 +262,11 @@
         display: flex;
         align-items: center;
         font-weight: 700;
-        background: linear-gradient(120deg, var(--color-fff) 0%, var(--color-fff) 100%);
+        background: linear-gradient(
+            120deg,
+            var(--color-fff) 0%,
+            var(--color-fff) 100%
+        );
         background-size: 200% auto;
         background-clip: text;
         -webkit-background-clip: text;
@@ -235,11 +275,12 @@
             appear 1.8s ease-in-out forwards,
             disappear 2s ease-in-out 3.5s forwards;
         white-space: nowrap;
-        transition: transform 0.4s ease, opacity 0.4s ease;
+        transition:
+            transform 0.4s ease,
+            opacity 0.4s ease;
         margin: 0;
     }
 
-   
     /* Адаптивність для ноутбуків */
     @media (max-width: 1366px) {
         .modal-content {
