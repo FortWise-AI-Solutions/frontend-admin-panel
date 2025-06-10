@@ -36,7 +36,7 @@
     <div
         class="block-bar settings {currentPath === '/widgets' ? 'active' : ''}"
         on:click={() => navigateTo("/widgets")}
-        on:keydown={(e) => e.key === "Enter" && navigateTo("/settings")}
+        on:keydown={(e) => e.key === "Enter" && navigateTo("/widgets")}
         role="button"
         tabindex="0"
     >
@@ -129,16 +129,16 @@
         background-color: var(--color-530549);
     }
 
-    /* Адаптивність для ноутбуків */
-    @media (max-width: 1366px) {
+    /* Адаптивність для великих ноутбуків */
+    @media (max-width: 1440px) {
         .sidebar {
-            max-width: 70px;
-            padding-top: 1.5%;
+            max-width: 65px;
+            padding-top: 1.8%;
         }
 
         .block-bar {
-            max-width: 45px;
-            max-height: 45px;
+            max-width: 42px;
+            max-height: 42px;
             margin-bottom: 16px;
         }
 
@@ -148,21 +148,59 @@
         }
     }
 
-    @media (max-width: 1024px) {
+    /* Адаптивність для стандартних ноутбуків */
+    @media (max-width: 1366px) {
         .sidebar {
             max-width: 60px;
-            padding-top: 1%;
+            padding-top: 1.5%;
         }
 
         .block-bar {
-            max-width: 40px;
-            max-height: 40px;
-            margin-bottom: 12px;
+            max-width: 38px;
+            max-height: 38px;
+            margin-bottom: 14px;
         }
 
         .block-bar img {
             width: 16px;
             height: 16px;
+        }
+    }
+
+    /* Адаптивність для менших ноутбуків */
+    @media (max-width: 1280px) {
+        .sidebar {
+            max-width: 55px;
+            padding-top: 1.2%;
+        }
+
+        .block-bar {
+            max-width: 36px;
+            max-height: 36px;
+            margin-bottom: 12px;
+        }
+
+        .block-bar img {
+            width: 15px;
+            height: 15px;
+        }
+    }
+
+    @media (max-width: 1024px) {
+        .sidebar {
+            max-width: 50px;
+            padding-top: 1%;
+        }
+
+        .block-bar {
+            max-width: 34px;
+            max-height: 34px;
+            margin-bottom: 10px;
+        }
+
+        .block-bar img {
+            width: 14px;
+            height: 14px;
         }
     }
 
