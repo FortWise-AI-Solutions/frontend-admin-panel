@@ -8,7 +8,6 @@
 
     import { onMount } from "svelte";
     import { themeStore } from "../lib/store/theme";
- 
 
     onMount(() => {
         themeStore.initTheme();
@@ -27,7 +26,7 @@
 <style>
     .app {
         display: flex;
-        height: 100vh;
+        height: 100%;
     }
 
     main {
@@ -42,6 +41,4 @@
         color: var(--color-fff);
         font-family: "Inter", sans-serif;
     }
-
-    
 </style>

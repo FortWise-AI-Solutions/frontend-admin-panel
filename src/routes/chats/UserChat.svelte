@@ -3,8 +3,10 @@
     import iconFC from "../../lib/images/full-screen-on.png";
     import iconSC from "../../lib/images/full-screen-off.png";
     import hisIcon from "../../lib/images/history.png";
+    import alara from "../../lib/images/alara.png";
     import { themeStore } from "../../lib/store/theme";
-    
+    import { supabase } from "../../lib/supabaseClient";
+    import { onMount, onDestroy } from "svelte";
 
     export let selectedUser: User;
     export let onBackToList: () => void = () => {};
@@ -12,13 +14,27 @@
     export let isFullscreen: boolean = false;
     export let backgroundImage: string | null = null;
 
-    // Типи для повідомлень
-    interface Message {
+    // Типи для повідомлень з бази даних
+    interface DatabaseMessage {
         id: number;
+        client_id: number;
+        bot_id: number | null;
+        end_user_id: number | null;
+        content: string | null;
+        platform: string | null;
+        time: string | null;
+        raw_payload: any;
+        response: string | null;
+    }
+
+    // Типи для відображення повідомлень
+    interface Message {
+        id: string;
         text: string;
         sender: "user" | "bot";
         timestamp: string;
         date: string;
+        originalId: number;
     }
 
     // Статуси та їх кольори
@@ -77,56 +93,13 @@
             .join("");
     }
 
-    // Повідомлення та функціонал чату
-    let messages: Message[] = [
-        {
-            id: 1,
-            text: "Hello! I need help with my order. Can you please check the status?",
-            sender: "user",
-            timestamp: new Date().toLocaleTimeString("en-US", {
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false,
-            }),
-            date: new Date().toLocaleDateString("en-US"),
-        },
-        {
-            id: 2,
-            text: "Of course! I'd be happy to help you check your order status. Could you please provide me with your order number?",
-            sender: "bot",
-            timestamp: new Date().toLocaleTimeString("en-US", {
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false,
-            }),
-            date: new Date().toLocaleDateString("en-US"),
-        },
-        {
-            id: 3,
-            text: "My order number is #12345. I placed it yesterday.",
-            sender: "user",
-            timestamp: new Date().toLocaleTimeString("en-US", {
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false,
-            }),
-            date: new Date().toLocaleDateString("en-US"),
-        },
-        {
-            id: 4,
-            text: "Thank you for providing the order number. Let me check that for you.",
-            sender: "bot",
-            timestamp: new Date().toLocaleTimeString("en-US", {
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false,
-            }),
-            date: new Date().toLocaleDateString("en-US"),
-        },
-    ];
-
+    // Стан повідомлень та завантаження
+    let messages: Message[] = [];
+    let loading: boolean = false;
+    let error: string | null = null;
     let newMessage: string = "";
     let messagesContainer: HTMLElement;
+    let realtimeSubscription: any = null;
 
     // Стан для історії та Алари
     let showHistory: boolean = false;
@@ -134,57 +107,120 @@
     let showConfirmModal: boolean = false;
     let confirmAction: "enable" | "disable" | null = null;
 
-    // Функція для відправки повідомлення
-    function sendMessage(): void {
-        if (newMessage.trim() === "") return;
+    // Функція для завантаження повідомлень з бази даних
+    async function loadMessages(): Promise<void> {
+        if (!selectedUser?.id) return;
 
-        const message: Message = {
-            id: messages.length + 1,
-            text: newMessage.trim(),
-            sender: "user",
-            timestamp: new Date().toLocaleTimeString("en-US", {
+        loading = true;
+        error = null;
+
+        try {
+            const { data, error: fetchError } = await supabase
+                .from("messages")
+                .select("*")
+                .eq("end_user_id", parseInt(selectedUser.id))
+                .order("time", { ascending: true });
+
+            if (fetchError) {
+                throw fetchError;
+            }
+
+            messages = convertDatabaseMessagesToDisplayMessages(data || []);
+
+            // Прокрутка до низу після завантаження
+            setTimeout(() => {
+                scrollToBottom();
+            }, 100);
+        } catch (err) {
+            console.error("Error loading messages:", err);
+            error =
+                err instanceof Error ? err.message : "Failed to load messages";
+        } finally {
+            loading = false;
+        }
+    }
+
+    // Конвертація повідомлень з бази даних у формат для відображення
+    function convertDatabaseMessagesToDisplayMessages(
+        dbMessages: DatabaseMessage[],
+    ): Message[] {
+        const convertedMessages: Message[] = [];
+
+        dbMessages.forEach((dbMsg) => {
+            const timestamp = dbMsg.time ? new Date(dbMsg.time) : new Date();
+            const timeString = timestamp.toLocaleTimeString("en-US", {
                 hour: "2-digit",
                 minute: "2-digit",
                 hour12: false,
-            }),
-            date: new Date().toLocaleDateString("en-US"),
-        };
+            });
+            const dateString = timestamp.toLocaleDateString("en-US");
 
-        messages = [...messages, message];
+            // Додаємо повідомлення користувача
+            if (dbMsg.content) {
+                convertedMessages.push({
+                    id: `${dbMsg.id}-user`,
+                    text: dbMsg.content,
+                    sender: "user",
+                    timestamp: timeString,
+                    date: dateString,
+                    originalId: dbMsg.id,
+                });
+            }
+
+            // Додаємо відповідь бота
+            if (dbMsg.response) {
+                convertedMessages.push({
+                    id: `${dbMsg.id}-bot`,
+                    text: dbMsg.response,
+                    sender: "bot",
+                    timestamp: timeString,
+                    date: dateString,
+                    originalId: dbMsg.id,
+                });
+            }
+        });
+
+        return convertedMessages;
+    }
+
+    // Функція для прокрутки до низу
+    function scrollToBottom(): void {
+        if (messagesContainer) {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+    }
+
+    // Функція для відправки повідомлення (тепер як відповідь бота)
+    async function sendMessage(): Promise<void> {
+        if (newMessage.trim() === "" || !selectedUser?.id) return;
+
+        const messageText = newMessage.trim();
         newMessage = "";
 
-        // Прокрутка до низу після додавання повідомлення
-        setTimeout(() => {
-            if (messagesContainer) {
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            }
-        }, 10);
+        try {
+            // Додаємо повідомлення в базу даних як response (відповідь бота)
+            const { data, error: insertError } = await supabase
+                .from("messages")
+                .insert({
+                    client_id: 1, // Замініть на реальний client_id
+                    end_user_id: parseInt(selectedUser.id),
+                    response: messageText, // Зберігаємо як response замість content
+                    platform: selectedUser.platform,
+                    time: new Date().toISOString(),
+                    raw_payload: {},
+                })
+                .select()
+                .single();
 
-        // Симуляція відповіді бота через 1-2 секунди (тільки якщо Алара увімкнена)
-        if (isAlaraEnabled) {
-            setTimeout(
-                () => {
-                    const botResponse: Message = {
-                        id: messages.length + 1,
-                        text: "Thank you for your message. I'm processing your request...",
-                        sender: "bot",
-                        timestamp: new Date().toLocaleTimeString("en-US", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            hour12: false,
-                        }),
-                        date: new Date().toLocaleDateString("en-US"),
-                    };
-                    messages = [...messages, botResponse];
-                    setTimeout(() => {
-                        if (messagesContainer) {
-                            messagesContainer.scrollTop =
-                                messagesContainer.scrollHeight;
-                        }
-                    }, 10);
-                },
-                Math.random() * 1000 + 1000,
-            );
+            if (insertError) {
+                throw insertError;
+            }
+
+            // Повідомлення буде додано автоматично через realtime subscription
+        } catch (err) {
+            console.error("Error sending message:", err);
+            // Повертаємо текст назад у випадку помилки
+            newMessage = messageText;
         }
     }
 
@@ -193,6 +229,55 @@
         if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
             sendMessage();
+        }
+    }
+
+    // Налаштування realtime підписки
+    function setupRealtimeSubscription(): void {
+        if (!selectedUser?.id) return;
+
+        realtimeSubscription = supabase
+            .channel(`messages-${selectedUser.id}`)
+            .on(
+                "postgres_changes",
+                {
+                    event: "*",
+                    schema: "public",
+                    table: "messages",
+                    filter: `end_user_id=eq.${selectedUser.id}`,
+                },
+                (payload) => {
+                    console.log("Realtime update:", payload);
+
+                    // Обробляємо INSERT події для автоматичного додавання повідомлень
+                    if (payload.eventType === "INSERT" && payload.new) {
+                        const newDbMessage = payload.new as DatabaseMessage;
+                        const newMessages =
+                            convertDatabaseMessagesToDisplayMessages([
+                                newDbMessage,
+                            ]);
+
+                        // Додаємо нові повідомлення до існуючих
+                        messages = [...messages, ...newMessages];
+
+                        // Прокручуємо до низу
+                        setTimeout(() => {
+                            scrollToBottom();
+                        }, 50);
+                    } else {
+                        // Для інших подій (UPDATE, DELETE) перезавантажуємо всі повідомлення
+                        loadMessages();
+                    }
+                },
+            )
+            .subscribe();
+    }
+
+    // Очищення підписки
+    function cleanupRealtimeSubscription(): void {
+        if (realtimeSubscription) {
+            supabase.removeChannel(realtimeSubscription);
+            realtimeSubscription = null;
         }
     }
 
@@ -249,6 +334,7 @@
         }
     }
 
+    // Реактивні змінні
     $: userMessages = getUserMessages();
     $: groupedMessages = groupMessagesByDate(userMessages);
 
@@ -266,6 +352,23 @@
         return $themeStore === "dark"
             ? "background-color: #1a1a1a;"
             : "background-color: #f5f5f5;";
+    }
+
+    // Lifecycle hooks
+    onMount(() => {
+        loadMessages();
+        setupRealtimeSubscription();
+    });
+
+    onDestroy(() => {
+        cleanupRealtimeSubscription();
+    });
+
+    // Перезавантаження при зміні користувача
+    $: if (selectedUser?.id) {
+        cleanupRealtimeSubscription();
+        loadMessages();
+        setupRealtimeSubscription();
     }
 </script>
 
@@ -299,6 +402,7 @@
                 />
             </svg>
         </button>
+
         <div class="user-info">
             <div class="user-details">
                 <h2>{selectedUser.nickname}</h2>
@@ -316,6 +420,7 @@
                 </div>
             </div>
         </div>
+
         <div class="header-actions">
             <div class="platform-badge">
                 {selectedUser.platform}
@@ -351,27 +456,49 @@
     <div class="chat-content">
         <!-- Область повідомлень -->
         <div class="messages-container" bind:this={messagesContainer}>
-            {#each messages as message (message.id)}
-                <div class="message {message.sender}">
-                    <!-- Аватар зліва для повідомлень бота -->
-                    {#if message.sender === "bot"}
-                        <div
-                            class="avatar"
-                            style="background: {getUserGradient(
-                                selectedUser.id,
-                            )}"
-                        ></div>
-                    {/if}
-                    <div class="message-content">
-                        <p>{message.text}</p>
-                        <span class="timestamp">{message.timestamp}</span>
-                    </div>
-                    <!-- Аватар справа для повідомлень користувача -->
-                    {#if message.sender === "user"}
-                        <div class="avatar user-avatar"></div>
-                    {/if}
+            {#if loading}
+                <div class="loading-messages">
+                    <div class="loading-spinner"></div>
+                    <p>Loading messages...</p>
                 </div>
-            {/each}
+            {:else if error}
+                <div class="error-messages">
+                    <p>Error loading messages: {error}</p>
+                    <button on:click={loadMessages} class="retry-button">
+                        Retry
+                    </button>
+                </div>
+            {:else if messages.length === 0}
+                <div class="no-messages">
+                    <p>No messages yet. Start a conversation!</p>
+                </div>
+            {:else}
+                {#each messages as message (message.id)}
+                    <div class="message {message.sender}">
+                        <!-- Аватар зліва для повідомлень користувача -->
+                        {#if message.sender === "user"}
+                            <div
+                                class="avatar"
+                                style="background: {getUserGradient(
+                                    selectedUser.id,
+                                )}"
+                            ></div>
+                        {/if}
+                        <div class="message-content">
+                            <p>{message.text}</p>
+                            <span class="timestamp">{message.timestamp}</span>
+                        </div>
+                        <!-- Аватар справа для повідомлень бота -->
+                        {#if message.sender === "bot"}
+                            <div
+                                class="avatar"
+                                style:background-image={`url('${alara}')`}
+                                style:background-size="cover"
+                            ></div>
+                        {/if}
+                    </div>
+                {/each}
+            {/if}
         </div>
     </div>
 
@@ -383,11 +510,12 @@
             on:keydown={handleKeydown}
             placeholder="Write a message..."
             class="message-input"
+            disabled={loading}
         />
         <button
             class="send-button"
             on:click={sendMessage}
-            disabled={newMessage.trim() === ""}
+            disabled={newMessage.trim() === "" || loading}
             aria-label="Send message"
         >
             <svg
@@ -468,19 +596,23 @@
                     style="width: 16px; height: 16px; margin-top: 2px;"
                 />
             </div>
-            {#each Object.entries(groupedMessages) as [date, msgs]}
-                <div class="date-group">
-                    <div class="date-header">{date}</div>
-                    {#each msgs as msg}
-                        <div class="history-message">
-                            <span class="history-timestamp"
-                                >{msg.timestamp}</span
-                            >
-                            <p class="history-text">{msg.text}</p>
-                        </div>
-                    {/each}
-                </div>
-            {/each}
+            {#if userMessages.length === 0}
+                <p class="no-history">No user messages yet.</p>
+            {:else}
+                {#each Object.entries(groupedMessages) as [date, msgs]}
+                    <div class="date-group">
+                        <div class="date-header">{date}</div>
+                        {#each msgs as msg}
+                            <div class="history-message">
+                                <span class="history-timestamp"
+                                    >{msg.timestamp}</span
+                                >
+                                <p class="history-text">{msg.text}</p>
+                            </div>
+                        {/each}
+                    </div>
+                {/each}
+            {/if}
         </div>
     </div>
 {/if}
@@ -759,25 +891,56 @@
     }
 
     .chat-container.light .fullscreen-button:hover {
-        background-color: #453D80;
+        background-color: #453d80;
     }
 
     .chat-content {
         display: flex;
         flex: 1;
         position: relative;
+        flex-direction: column;
+        max-height: 100%;
+        overflow-y: auto;
     }
 
     .messages-container {
         flex: 1;
-        padding-top: 40px;
-        padding-bottom: 40px;
-        padding-left: 120px;
-        padding-right: 120px;
+        height: 100%;
+        padding: 40px 80px;
         overflow-y: auto;
         display: flex;
         flex-direction: column;
         gap: 16px;
+
+        scrollbar-width: none; /* Firefox: сховати скрол */
+    }
+
+    /* Приховати скролбар у WebKit браузерах */
+    .messages-container::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+    }
+
+    /* Приховати скролбар за замовчуванням */
+    .messages-container::-webkit-scrollbar {
+        width: 0;
+    }
+
+    /* Показати на hover */
+    .messages-container:hover::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    /* Трек і повзунок */
+    .messages-container::-webkit-scrollbar-track {
+        background: #e6f0f3;
+        border-radius: 4px;
+    }
+
+    .messages-container::-webkit-scrollbar-thumb {
+        background-color: #0077b6;
+        border-radius: 4px;
+        border: 2px solid #e6f0f3;
     }
 
     .message {
@@ -788,11 +951,11 @@
     }
 
     .message.user {
-        align-self: flex-end;
+        align-self: flex-start;
     }
 
     .message.bot {
-        align-self: flex-start;
+        align-self: flex-end;
     }
 
     .message-content {
@@ -804,19 +967,19 @@
     }
 
     .chat-container.dark .message.user .message-content {
-        background-color: #530549;
-    }
-
-    .chat-container.light .message.user .message-content {
-        background-color: #e7e5f4;
-    }
-
-    .chat-container.dark .message.bot .message-content {
         background-color: #2a2a2a;
     }
 
-    .chat-container.light .message.bot .message-content {
+    .chat-container.light .message.user .message-content {
         background-color: #f3f4f6;
+    }
+
+    .chat-container.dark .message.bot .message-content {
+        background-color: #530549;
+    }
+
+    .chat-container.light .message.bot .message-content {
+        background-color: #e7e5f4;
     }
 
     .message-content p {
@@ -838,8 +1001,7 @@
 
     .timestamp {
         font-size: 11px;
-        display: block;
-        text-align: right;
+        opacity: 0.7;
         transition: color 0.3s ease;
     }
 
@@ -851,58 +1013,101 @@
         color: #6b7280;
     }
 
-    .message.bot .timestamp {
-        text-align: left;
+    .user-avatar {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .loading-messages,
+    .error-messages,
+    .no-messages {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+        gap: 16px;
+        padding: 40px;
+        text-align: center;
+    }
+
+    .loading-spinner {
+        width: 32px;
+        height: 32px;
+        border: 3px solid;
+        border-radius: 50%;
+        border-top-color: transparent;
+        animation: spin 1s linear infinite;
+        transition: border-color 0.3s ease;
+    }
+
+    .chat-container.dark .loading-spinner {
+        border-color: #444;
+        border-top-color: transparent;
+    }
+
+    .chat-container.light .loading-spinner {
+        border-color: #d1d5db;
+        border-top-color: transparent;
+    }
+
+    .retry-button {
+        background-color: #667eea;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background-color 0.2s ease;
+    }
+
+    .retry-button:hover {
+        background-color: #5a67d8;
     }
 
     .message-input-container {
         display: flex;
         align-items: center;
         gap: 12px;
-        padding: 40px 120px;
+        padding: 16px 80px;
+        border-top: 1px solid;
+        transition:
+            background-color 0.3s ease,
+            border-color 0.3s ease;
+    }
+
+    .chat-container.dark .message-input-container {
+        border: none;
+    }
+
+    .chat-container.light .message-input-container {
+        border-top-color: #e5e5e5;
+        background-color: #f9f9fb;
     }
 
     .message-input {
         flex: 1;
+        padding: 12px 16px;
         border: 1px solid;
         border-radius: 8px;
-        padding: 12px 40px;
         font-size: 14px;
-        resize: none;
-        min-height: 20px;
-        max-height: 100px;
+        outline: none;
         transition:
+            border-color 0.2s ease,
             background-color 0.3s ease,
-            border-color 0.3s ease,
             color 0.3s ease;
     }
 
     .chat-container.dark .message-input {
-        background-color: #1a1a1a;
+        background-color: #2a2a2a;
         border-color: #444;
         color: #fff;
     }
 
     .chat-container.light .message-input {
-        background-color: #ffffff;
+        background-color: #fff;
         border-color: #d1d5db;
         color: #1a1a1a;
-    }
-
-    .message-input:focus {
-        outline: none;
-    }
-
-    .chat-container.dark .message-input:focus {
-        border-color: #ffffff;
-    }
-
-    .chat-container.light .message-input:focus {
-        border-color: #530549;
-    }
-
-    .message-input::placeholder {
-        transition: color 0.3s ease;
     }
 
     .chat-container.dark .message-input::placeholder {
@@ -910,124 +1115,67 @@
     }
 
     .chat-container.light .message-input::placeholder {
-        color: #9ca3af;
+        color: #6b7280;
     }
 
-    .send-button {
-        background-color: #530549;
+    .chat-container.dark .message-input:focus {
+        border-color: #667eea;
+    }
+
+    .chat-container.light .message-input:focus {
+        border-color: #667eea;
+    }
+
+    .send-button,
+    .history-button {
+        background-color: var(--color-530549);
+        color: white;
         border: none;
-        border-radius: 8px;
         padding: 12px;
-        color: #fff;
+        border-radius: 8px;
         cursor: pointer;
-        transition: all 0.2s ease;
         display: flex;
         align-items: center;
         justify-content: center;
+        transition: background-color 0.2s ease;
+        min-width: 44px;
+        height: 44px;
     }
 
-   .chat-container.light .send-button {
-        background-color: #453d80;
-        border: none;
-        border-radius: 8px;
-        padding: 12px;
-        color: #fff;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .send-button:hover:not(:disabled) {
-        background-color: #6a0660;
-    }
-
-    .chat-container.light .send-button:hover:not(:disabled) {
-        background-color: #453d80;
+    .send-button:hover:not(:disabled),
+    .history-button:hover {
+        background-color: #800d70;
     }
 
     .send-button:disabled {
+        background-color: var(--color-530549);
         cursor: not-allowed;
-        opacity: 0.5;
-        transition: background-color 0.3s ease;
     }
 
-    .chat-container.dark .send-button:disabled {
-        background-color: #333;
-    }
-
-    .chat-container.light .send-button:disabled {
-        background-color: #9d97c4;
-    }
-
-    .history-button {
-        border: none;
-        border-radius: 8px;
-        padding: 12px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .chat-container.dark .history-button {
-        background-color: #272727;
-        color: #fff;
-    }
-
-    .chat-container.light .history-button {
-        background-color: #9d97c4;
-        color: #1a1a1a;
-    }
-
-    .chat-container.light .history-button:hover:not(:disabled) {
-        background-color: #453d80;
-    }
-
-    .history-button:hover:not(:disabled) {
-        background-color: #6a0660;
-        color: #fff;
-    }
-
-    .history-button:disabled {
-        cursor: not-allowed;
-        opacity: 0.5;
-        transition: background-color 0.3s ease;
-    }
-
-    .chat-container.dark .history-button:disabled {
-        background-color: #333;
-    }
-
-    .chat-container.light .history-button:disabled {
-        background-color: #d1d5db;
-    }
-
-    /* Панель історії */
     .history-panel {
         position: fixed;
         top: 0;
         right: -400px;
-        width: 500px;
-        height: 100%;
+        width: 400px;
+        height: 100vh;
+        border-left: 1px solid;
         display: flex;
         flex-direction: column;
-        z-index: 2000;
         transition:
-            right 0.3s ease-in-out,
-            background-color 0.3s ease;
-        box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+            right 0.3s ease,
+            background-color 0.3s ease,
+            border-color 0.3s ease;
+        z-index: 1001;
     }
 
     .history-panel.dark {
-        background-color: #2a2a2a;
+        background-color: #1a1a1a;
+        border-left-color: #3b3b3b;
     }
 
     .history-panel.light {
-        background-color: #f9f9fb;
-        box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+        background-color: #fff;
+        border-left-color: #e5e5e5;
     }
 
     .history-panel.show {
@@ -1036,86 +1184,89 @@
 
     .history-header {
         display: flex;
-        justify-content: space-between;
         align-items: center;
-        padding: 16px;
-        height: 39px;
+        justify-content: space-between;
+        padding: 16px 20px;
         border-bottom: 1px solid;
-        transition:
-            background-color 0.3s ease,
-            border-color 0.3s ease;
+        transition: border-color 0.3s ease;
     }
 
     .history-panel.dark .history-header {
         border-bottom-color: #3b3b3b;
-        background-color: #070709;
     }
 
     .history-panel.light .history-header {
         border-bottom-color: #e5e5e5;
-        background-color: #f9fafb;
     }
 
     .alara-toggle-button {
         padding: 8px 16px;
         border: none;
         border-radius: 6px;
-        font-size: 12px;
+        font-size: 14px;
         font-weight: 500;
         cursor: pointer;
         transition: all 0.2s ease;
     }
 
     .alara-toggle-button.enabled {
-        background-color: #e00909;
-        color: #fff;
+        background-color: #ef4444;
+        color: white;
+    }
+
+    .alara-toggle-button.enabled:hover {
+        background-color: #dc2626;
     }
 
     .alara-toggle-button.disabled {
-        background-color: #068100;
-        color: #fff;
+        background-color: #10b981;
+        color: white;
     }
 
-    .alara-toggle-button:hover {
-        opacity: 0.8;
+    .alara-toggle-button.disabled:hover {
+        background-color: #059669;
     }
 
     .close-history-button {
         background: none;
         border: none;
         cursor: pointer;
-        padding: 4px;
+        padding: 8px;
         border-radius: 4px;
-        transition: all 0.2s ease;
+        transition:
+            background-color 0.2s ease,
+            color 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 
     .history-panel.dark .close-history-button {
-        color: #9b9ca3;
+        color: #fff;
     }
 
     .history-panel.light .close-history-button {
-        color: #6b7280;
+        color: #1a1a1a;
     }
 
     .history-panel.dark .close-history-button:hover {
         background-color: #444;
-        color: #fff;
     }
 
     .history-panel.light .close-history-button:hover {
         background-color: #f0f0f0;
-        color: #1a1a1a;
     }
 
     .history-content {
         flex: 1;
-        padding: 16px;
+        padding: 20px;
         overflow-y: auto;
     }
 
     .history-content h3 {
         margin: 0 0 16px 0;
         font-size: 16px;
+        font-weight: 600;
         transition: color 0.3s ease;
     }
 
@@ -1127,13 +1278,30 @@
         color: #1a1a1a;
     }
 
+    .no-history {
+        font-size: 14px;
+        opacity: 0.7;
+        text-align: center;
+        margin-top: 40px;
+        transition: color 0.3s ease;
+    }
+
+    .history-panel.dark .no-history {
+        color: #9b9ca3;
+    }
+
+    .history-panel.light .no-history {
+        color: #6b7280;
+    }
+
     .date-group {
-        margin-bottom: 20px;
+        margin-bottom: 24px;
     }
 
     .date-header {
         font-size: 12px;
-        margin-bottom: 16px;
+        font-weight: 600;
+        margin-bottom: 12px;
         padding-bottom: 4px;
         border-bottom: 1px solid;
         transition:
@@ -1142,7 +1310,7 @@
     }
 
     .history-panel.dark .date-header {
-        color: #cecece;
+        color: #9b9ca3;
         border-bottom-color: #3b3b3b;
     }
 
@@ -1159,15 +1327,16 @@
     }
 
     .history-panel.dark .history-message {
-        background-color: #1a1a1a;
+        background-color: #2a2a2a;
     }
 
     .history-panel.light .history-message {
-        background-color: #e6e6e6;
+        background-color: #f9f9fb;
     }
 
     .history-timestamp {
-        font-size: 10px;
+        font-size: 11px;
+        opacity: 0.7;
         display: block;
         margin-bottom: 4px;
         transition: color 0.3s ease;
@@ -1185,6 +1354,7 @@
         margin: 0;
         font-size: 13px;
         line-height: 1.4;
+        word-wrap: break-word;
         transition: color 0.3s ease;
     }
 
@@ -1196,101 +1366,71 @@
         color: #1a1a1a;
     }
 
-    /* Модальне вікно */
     .modal-overlay {
         position: fixed;
         top: 0;
         left: 0;
         width: 100%;
         height: 100%;
-        background-color: rgba(0, 0, 0, 0.7);
+        background-color: rgba(0, 0, 0, 0.5);
         display: flex;
         align-items: center;
         justify-content: center;
-        z-index: 3000;
-        backdrop-filter: blur(4px);
+        z-index: 2000;
+        animation: fadeIn 0.2s ease-out;
     }
 
     .modal-content {
         padding: 24px;
-        border-radius: 12px;
+        border-radius: 8px;
         max-width: 400px;
         width: 90%;
-        border: 1px solid;
-        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-        transition:
-            background-color 0.3s ease,
-            border-color 0.3s ease;
+        animation: slideIn 0.2s ease-out;
+        transition: background-color 0.3s ease;
     }
 
     .modal-content.dark {
-        background-color: #131416;
-        border-color: #3b3b3b;
+        background-color: #1a1a1a;
+        color: #fff;
     }
 
     .modal-content.light {
-        background-color: #ffffff;
-        border-color: #e5e5e5;
-        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+        background-color: #fff;
+        color: #1a1a1a;
     }
 
     .modal-content h3 {
         margin: 0 0 12px 0;
         font-size: 18px;
-        transition: color 0.3s ease;
-    }
-
-    .modal-content.dark h3 {
-        color: #fff;
-    }
-
-    .modal-content.light h3 {
-        color: #1a1a1a;
+        font-weight: 600;
     }
 
     .modal-content p {
         margin: 0 0 20px 0;
         font-size: 14px;
-        line-height: 1.4;
-        transition: color 0.3s ease;
-    }
-
-    .modal-content.dark p {
-        color: #9b9ca3;
-    }
-
-    .modal-content.light p {
-        color: #6b7280;
+        line-height: 1.5;
+        opacity: 0.8;
     }
 
     .modal-actions {
         display: flex;
         gap: 12px;
-        margin-top: 70px;
         justify-content: flex-end;
     }
 
+    .cancel-button,
     .confirm-button {
-        background-color: #8a0778;
-        color: #fff;
+        padding: 8px 16px;
         border: none;
-        padding: 10px 20px;
         border-radius: 6px;
         font-size: 14px;
         cursor: pointer;
         transition: background-color 0.2s ease;
     }
 
-    .confirm-button:hover {
-        background-color: #6a0660;
-    }
-
     .cancel-button {
+        background-color: transparent;
         border: 1px solid;
-        padding: 10px 20px;
-        border-radius: 6px;
-        font-size: 14px;
-        cursor: pointer;
         transition:
             background-color 0.2s ease,
             border-color 0.3s ease,
@@ -1298,93 +1438,179 @@
     }
 
     .modal-content.dark .cancel-button {
-        background-color: #232426;
+        border-color: #444;
         color: #fff;
-        border-color: #35363a;
     }
 
     .modal-content.light .cancel-button {
-        background-color: #EEEEF0;
-        color: #374151;
         border-color: #d1d5db;
+        color: #1a1a1a;
     }
 
     .modal-content.dark .cancel-button:hover {
-        background-color: #555;
+        background-color: #444;
     }
 
     .modal-content.light .cancel-button:hover {
-        background-color: #e73131;
-        color: #fff;
+        background-color: #f9f9fb;
+    }
+
+    .confirm-button {
+        background-color: #ef4444;
+        color: white;
+    }
+
+    .confirm-button:hover {
+        background-color: #dc2626;
+    }
+
+    .connection-status {
+        position: absolute;
+        top: 10px;
+        right: 20px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        z-index: 10;
+    }
+
+    .connection-status.offline {
+        background-color: #ef4444;
+        color: white;
+    }
+
+    .typing-indicator {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        font-size: 12px;
+        opacity: 0.7;
+        animation: fadeIn 0.3s ease;
+    }
+
+    .typing-dots {
+        display: flex;
+        gap: 2px;
+    }
+
+    .typing-dots span {
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background-color: currentColor;
+        animation: typingDot 1.4s infinite;
+    }
+
+    .typing-dots span:nth-child(2) {
+        animation-delay: 0.2s;
+    }
+
+    .typing-dots span:nth-child(3) {
+        animation-delay: 0.4s;
+    }
+
+    @keyframes typingDot {
+        0%,
+        60%,
+        100% {
+            opacity: 0.3;
+        }
+        30% {
+            opacity: 1;
+        }
     }
 
     @keyframes fadeIn {
         from {
             opacity: 0;
-            transform: translateY(10px);
         }
         to {
             opacity: 1;
-            transform: translateY(0);
         }
     }
 
-    /* Скролбар для повідомлень */
-    .messages-container::-webkit-scrollbar,
-    .history-content::-webkit-scrollbar {
-        width: 6px;
+    @keyframes slideIn {
+        from {
+            transform: translateY(-20px);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
     }
 
-    .messages-container::-webkit-scrollbar-track,
-    .history-content::-webkit-scrollbar-track {
-        border-radius: 3px;
-        transition: background 0.3s ease;
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
     }
 
-    .chat-container.dark .messages-container::-webkit-scrollbar-track,
-    .history-panel.dark .history-content::-webkit-scrollbar-track {
-        background: #2a2a2a;
+    /* Responsive design */
+    @media (max-width: 768px) {
+        .messages-container {
+            padding-left: 20px;
+            padding-right: 20px;
+        }
+
+        .message {
+            max-width: 85%;
+        }
+
+        .history-panel {
+            width: 100%;
+            right: -100%;
+        }
+
+        .chat-header {
+            padding: 12px 16px;
+        }
+
+        .message-input-container {
+            padding: 12px 16px;
+        }
+
+        .user-details h2 {
+            font-size: 14px;
+        }
+
+        .platform-badge {
+            display: none;
+        }
     }
 
-    .chat-container.light .messages-container::-webkit-scrollbar-track,
-    .history-panel.light .history-content::-webkit-scrollbar-track {
-        background: #f3f4f6;
-    }
+    @media (max-width: 480px) {
+        .messages-container {
+            padding-left: 12px;
+            padding-right: 12px;
+            padding-top: 20px;
+            padding-bottom: 20px;
+        }
 
-    .messages-container::-webkit-scrollbar-thumb,
-    .history-content::-webkit-scrollbar-thumb {
-        border-radius: 3px;
-        transition: background 0.3s ease;
-    }
+        .message {
+            max-width: 95%;
+        }
 
-    .chat-container.dark .messages-container::-webkit-scrollbar-thumb,
-    .history-panel.dark .history-content::-webkit-scrollbar-thumb {
-        background: #444;
-    }
+        .message-content {
+            padding: 10px 12px;
+        }
 
-    .chat-container.light .messages-container::-webkit-scrollbar-thumb,
-    .history-panel.light .history-content::-webkit-scrollbar-thumb {
-        background: #d1d5db;
-    }
+        .message-content p {
+            font-size: 13px;
+        }
 
-    .messages-container::-webkit-scrollbar-thumb:hover,
-    .history-content::-webkit-scrollbar-thumb:hover {
-        transition: background 0.3s ease;
-    }
+        .header-actions {
+            gap: 8px;
+        }
 
-    .chat-container.dark .messages-container::-webkit-scrollbar-thumb:hover,
-    .history-panel.dark .history-content::-webkit-scrollbar-thumb:hover {
-        background: #555;
-    }
+        .fullscreen-button {
+            padding: 6px;
+        }
 
-    .chat-container.light .messages-container::-webkit-scrollbar-thumb:hover,
-    .history-panel.light .history-content::-webkit-scrollbar-thumb:hover {
-        background: #9ca3af;
-    }
-
-    .user-avatar {
-        background-image: url("../../lib/images/alara.png");
-        background-position: center;
-        background-size: cover;
+        .modal-content {
+            margin: 20px;
+            padding: 20px;
+        }
     }
 </style>

@@ -125,6 +125,9 @@
                     Choose across multiple widgets to find the best solution you
                     need
                 </p>
+
+
+            
             </div>
             <div class="array">
                 {#each widgets as widget}
@@ -159,9 +162,8 @@
             </div>
         </div>
 
-        <!-- Alarea Section -->
         <div class="wid-container">
-            <h1>Your Alarea</h1>
+            <h1>Your Alara</h1>
             <div class="chat-list">
                 <p>
                     Choose across multiple characters to create the best bot you
@@ -308,7 +310,7 @@
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-       
+
         overflow: hidden;
         cursor: pointer;
         transition: all 0.3s ease;
@@ -603,7 +605,6 @@
     /* Світла тема */
     [data-theme="light"] .widget-card {
         background: #ffffff;
-       
     }
 
     [data-theme="light"] .widget-footer {
@@ -612,7 +613,6 @@
     }
 
     [data-theme="light"] .widget-card:hover {
-      
         border-color: #007bff;
     }
 
@@ -769,9 +769,6 @@
     .widget-card:nth-child(4) {
         animation-delay: 0.4s;
     }
-
-
-
 
     .icon-bottom {
         filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));

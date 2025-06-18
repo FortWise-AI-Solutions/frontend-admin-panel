@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { onMount } from "svelte";
     import WhatsApp from "../../lib/images/filters/whatsApp.png";
     import Telegram from "../../lib/images/filters/telega.png";
     import Instagram from "../../lib/images/filters/instagram.png";
@@ -6,21 +7,21 @@
     import Offline from "../../lib/images/filters/offline.png";
     import HumRequired from "../../lib/images/filters/flag.png";
     import UserSelect from "./UserSelect.svelte";
-    
+    import { getEndUsers } from "../../lib/supabase";
+    import { mapEndUsersToUsers, type User } from "../../lib/userMpper";
 
     type Platform = "WhatsApp" | "Telegram" | "Instagram" | null;
     type Status = "Online" | "Offline" | "Human Required" | null;
-    type User = {
-        id: string;
-        nickname: string;
-        status: "on-going" | "offline" | "human-required" | "no-info";
-        platform: "WhatsApp" | "Telegram" | "Instagram";
-    };
 
     export let onUserSelect: (user: User) => void = () => {};
+    export let clientId: number | undefined = undefined; // Додайте це для фільтрації по клієнту
 
     let activePlatform: Platform = null;
     let activeStatus: Status = null;
+    let users: User[] = [];
+    let selectedUserId: string | null = null;
+    let loading = false;
+    let error: string | null = null;
 
     const platforms = [
         { name: "WhatsApp", icon: WhatsApp },
@@ -57,72 +58,36 @@
         filterContent();
     }
 
-    let users: User[] = [
-        {
-            id: "1",
-            nickname: "Andrew Ross",
-            status: "on-going",
-            platform: "WhatsApp",
-        },
-        {
-            id: "2",
-            nickname: "Anna Staygard",
-            status: "offline",
-            platform: "Telegram",
-        },
-        {
-            id: "3",
-            nickname: "Nikita Kilan",
-            status: "human-required",
-            platform: "Instagram",
-        },
-        {
-            id: "4",
-            nickname: "Anna Johnson",
-            status: "no-info",
-            platform: "WhatsApp",
-        },
-        {
-            id: "5",
-            nickname: "David Brown",
-            status: "on-going",
-            platform: "Telegram",
-        },
-        {
-            id: "6",
-            nickname: "Daan Boonstra",
-            status: "offline",
-            platform: "Instagram",
-        },
-        {
-            id: "7",
-            nickname: "Tom Howell",
-            status: "human-required",
-            platform: "WhatsApp",
-        },
-        {
-            id: "8",
-            nickname: "Emma Davis",
-            status: "on-going",
-            platform: "Instagram",
-        },
-    ];
-
-    let selectedUserId: string | null = null;
-
     function handleUserSelect(user: User): void {
         console.log("Вибрано користувача:", user);
         onUserSelect(user);
     }
 
     async function fetchUsers() {
+        loading = true;
+        error = null;
+
         try {
-            // const response = await fetch('/api/users');
-            // users = await response.json();
-        } catch (error) {
-            console.error("Помилка завантаження користувачів:", error);
+            const endUsers = await getEndUsers(clientId);
+            users = mapEndUsersToUsers(endUsers);
+            console.log("Завантажено користувачів:", users.length);
+        } catch (err) {
+            console.error("Помилка завантаження користувачів:", err);
+            error = "Не вдалося завантажити користувачів";
             users = [];
+        } finally {
+            loading = false;
         }
+    }
+
+    // Завантажуємо користувачів при монтуванні компонента
+    onMount(() => {
+        fetchUsers();
+    });
+
+    // Перезавантажуємо користувачів при зміні clientId
+    $: if (clientId !== undefined) {
+        fetchUsers();
     }
 
     $: activeFiltersCount = (activePlatform ? 1 : 0) + (activeStatus ? 1 : 0);
@@ -141,6 +106,7 @@
             </button>
         {/if}
     </div>
+
     <div class="filters-block">
         <!-- Platforms -->
         <div class="block">
@@ -162,6 +128,7 @@
                 </button>
             {/each}
         </div>
+
         <!-- Statuses -->
         <div class="block">
             <div class="block-title">
@@ -183,24 +150,38 @@
             {/each}
         </div>
     </div>
+
     <div class="select-user">
         <div class="users-header">
             <h2>Users</h2>
-            {#if activePlatform || activeStatus}
-                <span class="filter-indicator"> Filtered </span>
+            {#if loading}
+                <span class="loading-indicator">Loading...</span>
+            {:else if activePlatform || activeStatus}
+                <span class="filter-indicator">Filtered</span>
             {/if}
         </div>
-        <UserSelect
-            {users}
-            {activePlatform}
-            {activeStatus}
-            bind:selectedUserId
-            onUserSelect={handleUserSelect}
-        />
+
+        {#if error}
+            <div class="error-message">
+                <p>{error}</p>
+                <button on:click={fetchUsers} class="retry-button">
+                    Спробувати знову
+                </button>
+            </div>
+        {:else}
+            <UserSelect
+                {users}
+                {activePlatform}
+                {activeStatus}
+                bind:selectedUserId
+                onUserSelect={handleUserSelect}
+            />
+        {/if}
     </div>
 </div>
 
 <style>
+    /* Ваші існуючі стилі + додаткові */
     .filters {
         width: 100%;
         max-width: 300px;
@@ -212,6 +193,50 @@
         background-color: var(--color-070709);
     }
 
+    /* ... всі ваші існуючі стилі ... */
+
+    .loading-indicator {
+        background: var(--color-121213);
+        border: 1px solid var(--color-232426);
+        color: var(--color-9b9ca3);
+        font-size: 8px;
+        font-weight: 600;
+        padding: 4px 6px;
+        border-radius: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .error-message {
+        background: var(--color-121213);
+        border: 1px solid #e00909;
+        border-radius: 8px;
+        padding: 12px;
+        text-align: center;
+    }
+
+    .error-message p {
+        color: #e00909;
+        font-size: 12px;
+        margin: 0 0 8px 0;
+    }
+
+    .retry-button {
+        background: #e00909;
+        color: #fff;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-size: 11px;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+
+    .retry-button:hover {
+        background: #af0000;
+    }
+
+    /* Всі ваші інші існуючі стилі залишаються без змін */
     .filter-hdr {
         background-color: var(--color-121213);
         border: 1px solid var(--color-232426);
@@ -246,7 +271,7 @@
     }
 
     .clear-filters:hover {
-         background: #af0000;
+        background: #af0000;
     }
 
     .filters-block {
@@ -294,10 +319,6 @@
         background-color: var(--color-232426);
     }
 
-  
-
-
-
     .block-img {
         background-color: var(--color-121213);
         border-radius: 6px;
@@ -308,8 +329,6 @@
         align-items: center;
         transition: background-color 0.2s ease;
     }
-
- 
 
     .block-img img {
         width: 16px;
@@ -326,7 +345,6 @@
 
     .block-content.active .block-text {
         color: var(--color-ffffff);
-        
         font-weight: 500;
     }
 

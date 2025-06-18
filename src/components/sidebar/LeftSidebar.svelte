@@ -58,7 +58,7 @@
         display: flex;
         flex-direction: column;
         width: 100%;
-        max-width: 80px;
+        max-width: 60px;
         padding-top: 2%;
         border-right: 1px solid var(--color-232426);
         align-items: center;
@@ -67,9 +67,9 @@
 
     .block-bar {
         width: 100%;
-        max-width: 50px;
+        max-width: 40px;
         height: 100%;
-        max-height: 50px;
+        max-height: 40px;
         background-color: var(--color-262629);
         border-radius: 4px;
         margin-bottom: 20px;
