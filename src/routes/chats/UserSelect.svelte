@@ -1,13 +1,43 @@
 <script lang="ts">
-    import { themeStore } from '../../lib/store/theme';
-    import type { User } from '../../lib/types/type';
+    import { onMount } from "svelte";
+    import { themeStore } from "../../lib/store/theme";
+    import {
+        getFilteredUsers,
+        getCurrentUserInfo,
+    } from "../client-login/userService";
+    import type { User } from "../../lib/types/type";
+
     
-    
-    export let users: User[] = [];
+    interface CurrentUserInfo {
+        id: number;
+        name: string;
+        email?: string;
+        role: "alara_admin" | "user_admin" | "client_admin";
+        table: "panel_admins" | "clients" | "client_users";
+        client_id: number | null;
+        canViewAllUsers: boolean;
+    }
+
+  
+    interface UserWithMessages extends User {
+        unreadCount?: number;
+        lastMessageTime?: Date;
+    }
+
     export let selectedUserId: string | null = null;
     export let onUserSelect: (user: User) => void = () => {};
     export let activePlatform: "WhatsApp" | "Telegram" | "Instagram" | null = null;
     export let activeStatus: "Online" | "Offline" | "Human Required" | null = null;
+    export let clientId: number | undefined = undefined;
+    
+    // Додаємо пропс для передачі інформації про нові повідомлення
+    export let unreadMessages: Record<string, number> = {};
+    export let lastMessageTimes: Record<string, Date> = {};
+
+    let users: UserWithMessages[] = [];
+    let isLoading = true;
+    let error: string | null = null;
+    let currentUserInfo: CurrentUserInfo | null = getCurrentUserInfo();
 
     // Статуси та їх кольори
     const statusConfig: Record<string, { color: string; label: string }> = {
@@ -17,19 +47,26 @@
         "no-info": { color: "#6b7280", label: "No Info" },
     };
 
+    const platformMapping: Record<string, string[]> = {
+        WhatsApp: ["WhatsApp", "whatsapp", "WHATSAPP"],
+        Telegram: ["Telegram", "telegram", "TELEGRAM"],
+        Instagram: ["Instagram", "instagram", "INSTAGRAM"],
+    };
+
     // Маппінг статусів фільтра до статусів користувачів
     const statusMapping: Record<string, string> = {
-        "Online": "on-going",
-        "Offline": "offline", 
-        "Human Required": "human-required"
+        Online: "on-going",
+        Offline: "offline",
+        "Human Required": "human-required",
     };
 
     // Генерація рандомного градієнта для аватара
     function generateGradient(): string {
         const colors = [
-            "#fbbf24", "#4DE944", "#8b5cf6", "#ec4899", "#3b82f6", "#2097F0",
-            "#D0523B", "#9B84BA", "#C48C55", "#B13EB0", "#81589E", "#DAEBF9",
-            "#D042C2", "#B85124", "#1F3C27", "#E1B310", "#2CF2A1", "#FFFFFF",
+            "#fbbf24", "#4DE944", "#8b5cf6", "#ec4899", "#3b82f6",
+            "#2097F0", "#D0523B", "#9B84BA", "#C48C55", "#B13EB0",
+            "#81589E", "#DAEBF9", "#D042C2", "#B85124", "#1F3C27",
+            "#E1B310", "#2CF2A1", "#FFFFFF",
         ];
         const color1 = colors[Math.floor(Math.random() * colors.length)];
         let color2 = colors[Math.floor(Math.random() * colors.length)];
@@ -42,7 +79,6 @@
 
     // Кешування градієнтів для кожного користувача
     const gradientCache = new Map<string, string>();
-    
     function getUserGradient(userId: string): string {
         if (!gradientCache.has(userId)) {
             gradientCache.set(userId, generateGradient());
@@ -50,59 +86,201 @@
         return gradientCache.get(userId)!;
     }
 
-   
+    // Завантаження користувачів при монтуванні компонента
+    onMount(async () => {
+        await loadUsers();
+    });
 
-    // Обробка вибору користувача
-    function handleUserSelect(user: User): void {
-        selectedUserId = user.id;
-        onUserSelect(user);
+    async function loadUsers() {
+        try {
+            isLoading = true;
+            error = null;
+            console.log("Loading users for:", currentUserInfo, "clientId:", clientId);
+            
+            const loadedUsers = await getFilteredUsers(clientId);
+            
+            // Додаємо інформацію про непрочитані повідомлення
+            users = loadedUsers.map(user => ({
+                ...user,
+                unreadCount: unreadMessages[user.id] || 0,
+                lastMessageTime: lastMessageTimes[user.id]
+            }));
+            
+            console.log(`Loaded ${users.length} users`);
+        } catch (err) {
+            console.error("Error loading users:", err);
+            error = err instanceof Error ? err.message : "Failed to load users";
+            users = [];
+        } finally {
+            isLoading = false;
+        }
     }
 
-    // Фільтрація користувачів
-    $: filteredUsers = users.filter(user => {
-        let platformMatch = true;
-        let statusMatch = true;
-
-        // Фільтр по платформі
-        if (activePlatform) {
-            platformMatch = user.platform === activePlatform;
+   
+    function handleUserSelect(user: UserWithMessages): void {
+        selectedUserId = user.id;
+        onUserSelect(user);
+        
+        
+        if (user.unreadCount && user.unreadCount > 0) {
+            unreadMessages[user.id] = 0;
+            updateUserUnreadCount(user.id, 0);
         }
+    }
 
-        // Фільтр по статусу
-        if (activeStatus) {
-            const mappedStatus = statusMapping[activeStatus];
-            statusMatch = user.status === mappedStatus;
+   
+    function updateUserUnreadCount(userId: string, count: number) {
+        users = users.map(user => 
+            user.id === userId 
+                ? { ...user, unreadCount: count }
+                : user
+        );
+    }
+
+    
+    function sortUsers(users: UserWithMessages[]): UserWithMessages[] {
+        return [...users].sort((a, b) => {
+            const aUnread = a.unreadCount || 0;
+            const bUnread = b.unreadCount || 0;
+            
+           
+            if (aUnread > 0 && bUnread > 0) {
+                return bUnread - aUnread;
+            }
+            
+          
+            if (aUnread > 0 && bUnread === 0) return -1;
+            if (bUnread > 0 && aUnread === 0) return 1;
+            
+           
+           
+            if (a.lastMessageTime && b.lastMessageTime) {
+                return b.lastMessageTime.getTime() - a.lastMessageTime.getTime();
+            }
+            
+            return 0;
+        });
+    }
+
+    
+    $: filteredAndSortedUsers = sortUsers(
+        users.filter((user) => {
+            let platformMatch = true;
+            let statusMatch = true;
+
+            if (activePlatform) {
+                const possiblePlatforms = platformMapping[activePlatform] || [activePlatform];
+                platformMatch = possiblePlatforms.includes(user.platform);
+            }
+
+            if (activeStatus) {
+                const mappedStatus = statusMapping[activeStatus];
+                statusMatch = user.status === mappedStatus;
+            }
+
+            return platformMatch && statusMatch;
+        })
+    );
+
+    
+    $: if (Object.keys(unreadMessages).length > 0) {
+        users = users.map(user => ({
+            ...user,
+            unreadCount: unreadMessages[user.id] || 0,
+            lastMessageTime: lastMessageTimes[user.id] || user.lastMessageTime
+        }));
+    }
+
+    $: if (clientId !== undefined) {
+        loadUsers();
+    }
+
+    
+    export function refreshUsers() {
+        loadUsers();
+    }
+
+   
+    export function updateUnreadMessages(userId: string, count: number, lastMessageTime?: Date) {
+        unreadMessages[userId] = count;
+        if (lastMessageTime) {
+            lastMessageTimes[userId] = lastMessageTime;
         }
+        updateUserUnreadCount(userId, count);
+    }
 
-        return platformMatch && statusMatch;
-    });
+  
+    $: {
+        console.log('Filter Debug:', {
+            activePlatform,
+            activeStatus,
+            totalUsers: users.length,
+            filteredUsers: filteredAndSortedUsers.length,
+            userPlatforms: [...new Set(users.map(u => u.platform))],
+            userStatuses: [...new Set(users.map(u => u.status))],
+            unreadCounts: users.map(u => ({ id: u.id, unread: u.unreadCount }))
+        });
+    }
 </script>
 
 <div class="block-users">
-    {#if filteredUsers.length === 0}
+    {#if isLoading}
+        <div class="loading">
+            <p>Loading users...</p>
+        </div>
+    {:else if error}
+        <div class="error">
+            <p>Error: {error}</p>
+            <button on:click={loadUsers} class="retry-btn">Retry</button>
+        </div>
+    {:else if filteredAndSortedUsers.length === 0}
         <div class="no-users">
-            <p>No users found</p>
+            {#if users.length === 0}
+                <p>No users available</p>
+                {#if currentUserInfo}
+                    <small>
+                        Logged in as: {currentUserInfo.name}
+                        ({currentUserInfo.role})
+                        {#if currentUserInfo.client_id}
+                            | Client ID: {currentUserInfo.client_id}
+                        {/if}
+                    </small>
+                {/if}
+            {:else}
+                <p>No users match current filters</p>
+            {/if}
         </div>
     {:else}
-        {#each filteredUsers as user (user.id)}
+        {#each filteredAndSortedUsers as user (user.id)}
             <div
                 class="user"
                 class:selected={selectedUserId === user.id}
+                class:has-unread={user.unreadCount && user.unreadCount > 0}
                 on:click={() => handleUserSelect(user)}
                 role="button"
                 tabindex="0"
                 on:keydown={(e) => e.key === "Enter" && handleUserSelect(user)}
             >
-                <div
-                    class="avatar"
-                    style="background: {getUserGradient(user.id)}"
-                >
-                  
+                <div class="avatar-container">
+                    <div
+                        class="avatar"
+                        style="background: {getUserGradient(user.id)}"
+                    ></div>
+                    {#if user.unreadCount && user.unreadCount > 0}
+                        <div class="unread-badge">
+                            {user.unreadCount > 99 ? '99+' : user.unreadCount}
+                        </div>
+                    {/if}
                 </div>
                 <div class="text">
-                    <h3>{user.nickname}</h3>
+                    <h3>
+                        {user.nickname ||
+                            user.name ||
+                            user.username ||
+                            "no info"}
+                    </h3>
                     <div class="status">
-                        <p>{statusConfig[user.status]?.label || "Unknown"}</p>
+                        <p>{statusConfig[user.status]?.label || "no info"}</p>
                         <div
                             class="status-indicator"
                             style="background-color: {statusConfig[user.status]
@@ -133,6 +311,7 @@
         cursor: pointer;
         transition: all 0.2s ease;
         border: 2px solid transparent;
+        position: relative;
     }
 
     .user:hover {
@@ -152,6 +331,15 @@
         color: #fff;
     }
 
+    .user.has-unread {
+        border-left: 3px solid #4DE944;
+    }
+
+    .avatar-container {
+        position: relative;
+        flex-shrink: 0;
+    }
+
     .avatar {
         width: 34px;
         height: 34px;
@@ -159,11 +347,27 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        flex-shrink: 0;
         position: relative;
     }
 
-    
+    .unread-badge {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        background-color: #E94447;
+        color: white;
+        border-radius: 10px;
+        min-width: 18px;
+        height: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 0 4px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        z-index: 1;
+    }
 
     .text {
         flex: 1;
@@ -180,6 +384,10 @@
         text-overflow: ellipsis;
     }
 
+    .user.has-unread .text h3 {
+        font-weight: 600;
+    }
+
     .status {
         display: flex;
         align-items: center;
@@ -187,7 +395,7 @@
         margin-top: 2px;
     }
 
-    .status p {
+       .status p {
         margin: 0;
         font-size: 12px;
         color: var(--color-9b9ca3);
@@ -203,15 +411,42 @@
         flex-shrink: 0;
     }
 
-    .no-users {
+    .no-users,
+    .loading,
+    .error {
         text-align: center;
         padding: 32px 16px;
     }
 
-    .no-users p {
-        margin: 0;
+    .no-users p,
+    .loading p,
+    .error p {
+        margin: 0 0 8px 0;
         color: var(--color-9b9ca3);
         font-size: 16px;
+    }
+
+    .no-users small {
+        color: var(--color-9b9ca3);
+        font-size: 12px;
+        display: block;
+        margin-top: 8px;
+        line-height: 1.4;
+    }
+
+    .retry-btn {
+        background-color: var(--color-530549);
+        color: #fff;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        margin-top: 8px;
+    }
+
+    .retry-btn:hover {
+        background-color: var(--color-8a0778);
     }
 
     /* Скролбар */
@@ -233,5 +468,25 @@
         background: var(--color-9b9ca3);
     }
 
-   
+    /* Анімація для нових повідомлень */
+    @keyframes pulse {
+        0% {
+            transform: scale(1);
+        }
+        50% {
+            transform: scale(1.1);
+        }
+        100% {
+            transform: scale(1);
+        }
+    }
+
+    .unread-badge {
+        animation: pulse 2s infinite;
+    }
+
+    .user.has-unread:hover .unread-badge {
+        animation: none;
+    }
 </style>
+

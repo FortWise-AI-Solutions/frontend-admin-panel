@@ -7,21 +7,25 @@
     import Offline from "../../lib/images/filters/offline.png";
     import HumRequired from "../../lib/images/filters/flag.png";
     import UserSelect from "./UserSelect.svelte";
-    import { getEndUsers } from "../../lib/supabase";
-    import { mapEndUsersToUsers, type User } from "../../lib/userMpper";
+    import type { User } from "../../lib/types/type";
 
     type Platform = "WhatsApp" | "Telegram" | "Instagram" | null;
     type Status = "Online" | "Offline" | "Human Required" | null;
 
     export let onUserSelect: (user: User) => void = () => {};
-    export let clientId: number | undefined = undefined; // Додайте це для фільтрації по клієнту
+    export let clientId: number | undefined = undefined;
 
     let activePlatform: Platform = null;
     let activeStatus: Status = null;
-    let users: User[] = [];
     let selectedUserId: string | null = null;
-    let loading = false;
-    let error: string | null = null;
+    let userSelectRef: UserSelect;
+
+    // Додаємо стан для непрочитаних повідомлень
+    let unreadMessages: Record<string, number> = {};
+    let lastMessageTimes: Record<string, Date> = {};
+
+    // WebSocket або інший механізм для отримання нових повідомлень
+    let websocket: WebSocket | null = null;
 
     const platforms = [
         { name: "WhatsApp", icon: WhatsApp },
@@ -35,10 +39,155 @@
         { name: "Human Required", icon: HumRequired },
     ];
 
+    onMount(() => {
+        // Ініціалізуємо WebSocket з'єднання для отримання нових повідомлень
+        initializeWebSocket();
+        
+        // Завантажуємо збережені непрочитані повідомлення з localStorage
+        loadUnreadMessagesFromStorage();
+
+        return () => {
+            if (websocket) {
+                websocket.close();
+            }
+        };
+    });
+
+    function initializeWebSocket() {
+        try {
+            // Замініть на ваш WebSocket URL
+            websocket = new WebSocket('ws://your-websocket-url');
+            
+            websocket.onopen = () => {
+                console.log('WebSocket connected');
+            };
+
+            websocket.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleWebSocketMessage(data);
+                } catch (error) {
+                    console.error('Error parsing WebSocket message:', error);
+                }
+            };
+
+            websocket.onclose = () => {
+                console.log('WebSocket disconnected');
+                // Спробуємо перепідключитися через 5 секунд
+                setTimeout(() => {
+                    initializeWebSocket();
+                }, 5000);
+            };
+
+            websocket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+        } catch (error) {
+            console.error('Failed to initialize WebSocket:', error);
+        }
+    }
+
+    function handleWebSocketMessage(data: any) {
+        switch (data.type) {
+            case 'new_message':
+                handleNewMessage(data.userId, data.messageTime);
+                break;
+            case 'messages_read':
+                handleMessagesRead(data.userId);
+                break;
+            case 'bulk_messages':
+                handleBulkMessages(data.messages);
+                break;
+            default:
+                console.log('Unknown message type:', data.type);
+        }
+    }
+
+    function handleNewMessage(userId: string, messageTime?: string) {
+        unreadMessages[userId] = (unreadMessages[userId] || 0) + 1;
+        lastMessageTimes[userId] = messageTime ? new Date(messageTime) : new Date();
+        
+        // Оновлюємо компонент UserSelect
+        if (userSelectRef) {
+            userSelectRef.updateUnreadMessages(
+                userId, 
+                unreadMessages[userId], 
+                lastMessageTimes[userId]
+            );
+        }
+
+        // Зберігаємо в localStorage
+        saveUnreadMessagesToStorage();
+
+        console.log(`New message for user ${userId}. Total unread: ${unreadMessages[userId]}`);
+    }
+
+    function handleMessagesRead(userId: string) {
+        unreadMessages[userId] = 0;
+        
+        if (userSelectRef) {
+            userSelectRef.updateUnreadMessages(userId, 0);
+        }
+
+        saveUnreadMessagesToStorage();
+        console.log(`Messages marked as read for user ${userId}`);
+    }
+
+    function handleBulkMessages(messages: Array<{userId: string, count: number, lastMessageTime?: string}>) {
+        messages.forEach(({ userId, count, lastMessageTime }) => {
+            unreadMessages[userId] = count;
+            if (lastMessageTime) {
+                lastMessageTimes[userId] = new Date(lastMessageTime);
+            }
+            
+            if (userSelectRef) {
+                userSelectRef.updateUnreadMessages(
+                    userId, 
+                    count, 
+                    lastMessageTimes[userId]
+                );
+            }
+        });
+
+        saveUnreadMessagesToStorage();
+    }
+
+    function saveUnreadMessagesToStorage() {
+        try {
+            localStorage.setItem('unreadMessages', JSON.stringify(unreadMessages));
+            localStorage.setItem('lastMessageTimes', JSON.stringify(
+                Object.fromEntries(
+                    Object.entries(lastMessageTimes).map(([key, value]) => [key, value.toISOString()])
+                )
+            ));
+        } catch (error) {
+            console.error('Failed to save unread messages to localStorage:', error);
+        }
+    }
+
+    function loadUnreadMessagesFromStorage() {
+        try {
+            const savedUnread = localStorage.getItem('unreadMessages');
+            const savedTimes = localStorage.getItem('lastMessageTimes');
+
+            if (savedUnread) {
+                unreadMessages = JSON.parse(savedUnread);
+            }
+
+            if (savedTimes) {
+                const parsedTimes = JSON.parse(savedTimes);
+                lastMessageTimes = Object.fromEntries(
+                    Object.entries(parsedTimes).map(([key, value]) => [key, new Date(value as string)])
+                );
+            }
+        } catch (error) {
+            console.error('Failed to load unread messages from localStorage:', error);
+        }
+    }
+
     function selectFilter(type: "platform" | "status", value: string) {
         if (type === "platform") {
-            activePlatform =
-                activePlatform === value ? null : (value as Platform);
+            activePlatform = activePlatform === value ? null : (value as Platform);
         } else {
             activeStatus = activeStatus === value ? null : (value as Status);
         }
@@ -60,183 +209,164 @@
 
     function handleUserSelect(user: User): void {
         console.log("Вибрано користувача:", user);
+        
+        // Скидаємо лічильник непрочитаних повідомлень для вибраного користувача
+        if (unreadMessages[user.id] > 0) {
+            handleMessagesRead(user.id);
+            
+            // Відправляємо повідомлення на сервер про прочитання
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.send(JSON.stringify({
+                    type: 'mark_as_read',
+                    userId: user.id,
+                    timestamp: new Date().toISOString()
+                }));
+            }
+        }
+        
         onUserSelect(user);
     }
 
-    async function fetchUsers() {
-        loading = true;
-        error = null;
-
-        try {
-            const endUsers = await getEndUsers(clientId);
-            users = mapEndUsersToUsers(endUsers);
-            console.log("Завантажено користувачів:", users.length);
-        } catch (err) {
-            console.error("Помилка завантаження користувачів:", err);
-            error = "Не вдалося завантажити користувачів";
-            users = [];
-        } finally {
-            loading = false;
-        }
-    }
-
-    // Завантажуємо користувачів при монтуванні компонента
-    onMount(() => {
-        fetchUsers();
-    });
-
-    // Перезавантажуємо користувачів при зміні clientId
-    $: if (clientId !== undefined) {
-        fetchUsers();
+    // Оновлюємо UserSelect при зміні clientId
+    $: if (clientId !== undefined && userSelectRef) {
+        userSelectRef.refreshUsers();
     }
 
     $: activeFiltersCount = (activePlatform ? 1 : 0) + (activeStatus ? 1 : 0);
+
+    // Підраховуємо загальну кількість непрочитаних повідомлень
+    $: totalUnreadCount = Object.values(unreadMessages).reduce((sum, count) => sum + count, 0);
+
+    // Експортуємо функції для використання ззовні
+    export function addNewMessage(userId: string, messageTime?: Date) {
+        handleNewMessage(userId, messageTime?.toISOString());
+    }
+
+    export function markUserMessagesAsRead(userId: string) {
+        handleMessagesRead(userId);
+    }
+
+    export function updateUnreadCount(userId: string, count: number) {
+        unreadMessages[userId] = count;
+        if (userSelectRef) {
+            userSelectRef.updateUnreadMessages(userId, count);
+        }
+        saveUnreadMessagesToStorage();
+    }
+
+    // Функція для тестування (видаліть у продакшені)
+    function simulateNewMessage() {
+        const testUserId = 'test-user-1';
+        handleNewMessage(testUserId);
+    }
 </script>
 
-<div class="filters">
-    <div class="filter-hdr">
-        <h1>Filters</h1>
-        {#if activeFiltersCount > 0}
-            <button
-                class="clear-filters"
-                on:click={clearAllFilters}
-                title="Clear all filters"
-            >
-                Clear ({activeFiltersCount})
-            </button>
-        {/if}
-    </div>
-
-    <div class="filters-block">
-        <!-- Platforms -->
-        <div class="block">
-            <div class="block-title">
-                <span>Platforms</span>
-            </div>
-            {#each platforms as { name, icon }}
+<div class="filters-container">
+    <div class="filters">
+        <div class="filter-hdr">
+            <h1>Filters</h1>
+            {#if totalUnreadCount > 0}
+                
+            {/if}
+            {#if activeFiltersCount > 0}
                 <button
-                    class="block-content"
-                    class:active={activePlatform === name}
-                    on:click={() => selectFilter("platform", name)}
-                    type="button"
-                    aria-pressed={activePlatform === name}
+                    class="clear-filters"
+                    on:click={clearAllFilters}
+                    title="Clear all filters"
                 >
-                    <div class="block-img">
-                        <img src={icon} alt={name} />
-                    </div>
-                    <p class="block-text">{name}</p>
+                    Clear ({activeFiltersCount})
                 </button>
-            {/each}
+            {/if}
         </div>
-
-        <!-- Statuses -->
-        <div class="block">
-            <div class="block-title">
-                <span>Status</span>
+        <div class="filters-block">
+            <!-- Platforms -->
+            <div class="block">
+                <div class="block-title">
+                    <span>Platforms</span>
+                </div>
+                {#each platforms as { name, icon }}
+                    <button
+                        class="block-content"
+                        class:active={activePlatform === name}
+                        on:click={() => selectFilter("platform", name)}
+                        type="button"
+                        aria-pressed={activePlatform === name}
+                    >
+                        <div class="block-img">
+                            <img src={icon} alt={name} />
+                        </div>
+                        <p class="block-text">{name}</p>
+                    </button>
+                {/each}
             </div>
-            {#each statuses as { name, icon }}
-                <button
-                    class="block-content"
-                    class:active={activeStatus === name}
-                    on:click={() => selectFilter("status", name)}
-                    type="button"
-                    aria-pressed={activeStatus === name}
-                >
-                    <div class="block-img">
-                        <img src={icon} alt={name} />
-                    </div>
-                    <p class="block-text">{name}</p>
-                </button>
-            {/each}
+            <!-- Statuses -->
+            <div class="block">
+                <div class="block-title">
+                    <span>Status</span>
+                </div>
+                {#each statuses as { name, icon }}
+                    <button
+                        class="block-content"
+                        class:active={activeStatus === name}
+                        on:click={() => selectFilter("status", name)}
+                        type="button"
+                        aria-pressed={activeStatus === name}
+                    >
+                        <div class="block-img">
+                            <img src={icon} alt={name} />
+                        </div>
+                        <p class="block-text">{name}</p>
+                    </button>
+                {/each}
+            </div>
         </div>
     </div>
-
     <div class="select-user">
         <div class="users-header">
             <h2>Users</h2>
-            {#if loading}
-                <span class="loading-indicator">Loading...</span>
-            {:else if activePlatform || activeStatus}
-                <span class="filter-indicator">Filtered</span>
-            {/if}
+            
         </div>
-
-        {#if error}
-            <div class="error-message">
-                <p>{error}</p>
-                <button on:click={fetchUsers} class="retry-button">
-                    Спробувати знову
-                </button>
-            </div>
-        {:else}
+        <div class="user-list-block">
             <UserSelect
-                {users}
+                bind:this={userSelectRef}
                 {activePlatform}
                 {activeStatus}
                 bind:selectedUserId
+                bind:unreadMessages
+                bind:lastMessageTimes
                 onUserSelect={handleUserSelect}
+                {clientId}
             />
-        {/if}
+        </div>
     </div>
+
+    <!-- Кнопка для тестування (видаліть у продакшені) -->
+    <!-- <button class="test-btn" on:click={simulateNewMessage}>
+        Test New Message
+    </button> -->
 </div>
 
 <style>
-    /* Ваші існуючі стилі + додаткові */
     .filters {
         width: 100%;
-        max-width: 300px;
+        margin: 0 auto;
+        font-family: "Inter", sans-serif;
+        background-color: var(--color-070709);
+    }
+
+    .filters-container {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        width: 100%;
+        max-width: 400px;
         padding: 12px;
         padding-top: 2%;
         border-right: 1px solid var(--color-232426);
         font-family: "Inter", sans-serif;
-        overflow-y: auto;
         background-color: var(--color-070709);
     }
 
-    /* ... всі ваші існуючі стилі ... */
-
-    .loading-indicator {
-        background: var(--color-121213);
-        border: 1px solid var(--color-232426);
-        color: var(--color-9b9ca3);
-        font-size: 8px;
-        font-weight: 600;
-        padding: 4px 6px;
-        border-radius: 4px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    .error-message {
-        background: var(--color-121213);
-        border: 1px solid #e00909;
-        border-radius: 8px;
-        padding: 12px;
-        text-align: center;
-    }
-
-    .error-message p {
-        color: #e00909;
-        font-size: 12px;
-        margin: 0 0 8px 0;
-    }
-
-    .retry-button {
-        background: #e00909;
-        color: #fff;
-        border: none;
-        padding: 6px 12px;
-        border-radius: 4px;
-        font-size: 11px;
-        cursor: pointer;
-        transition: background-color 0.2s ease;
-    }
-
-    .retry-button:hover {
-        background: #af0000;
-    }
-
-    /* Всі ваші інші існуючі стилі залишаються без змін */
     .filter-hdr {
         background-color: var(--color-121213);
         border: 1px solid var(--color-232426);
@@ -249,6 +379,7 @@
         align-items: center;
         justify-content: center;
         gap: 8px;
+        flex-wrap: wrap;
     }
 
     .filter-hdr h1 {
@@ -257,6 +388,16 @@
         font-weight: 400;
         margin: 0;
         color: var(--color-fff);
+    }
+
+    .unread-indicator {
+        background: #4DE944;
+        color: #000;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 10px;
+        animation: pulse 2s infinite;
     }
 
     .clear-filters {
@@ -300,7 +441,7 @@
         letter-spacing: 0.5px;
     }
 
-    .block-content {
+        .block-content {
         display: flex;
         align-items: center;
         gap: 8px;
@@ -317,6 +458,13 @@
 
     .block-content:hover {
         background-color: var(--color-232426);
+    }
+
+
+
+    .block-content.active .block-text {
+        color: var(--color-ffffff);
+        font-weight: 500;
     }
 
     .block-img {
@@ -343,13 +491,39 @@
         margin: 0;
     }
 
-    .block-content.active .block-text {
-        color: var(--color-ffffff);
-        font-weight: 500;
-    }
-
     .select-user {
         margin-top: 40px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding-bottom: 10%;
+    }
+
+    .user-list-block {
+        max-width: 100%;
+        overflow-y: auto;
+    }
+
+    /* Стилізація скролбару */
+    .user-list-block::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .user-list-block::-webkit-scrollbar-track {
+        background: none;
+        border-radius: 4px;
+    }
+
+    .user-list-block::-webkit-scrollbar-thumb {
+        background-color: #4b4b4b62;
+        border-radius: 4px;
+        border: 2px solid transparent;
+        background-clip: content-box;
+    }
+
+    .user-list-block::-webkit-scrollbar-thumb:hover {
+        background-color: #4b4b4b62;
     }
 
     .users-header {
@@ -368,6 +542,24 @@
         letter-spacing: 0.5px;
     }
 
+    .header-indicators {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .total-unread-badge {
+        background: #E94447;
+        color: #fff;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 3px 6px;
+        border-radius: 10px;
+        min-width: 16px;
+        text-align: center;
+        animation: pulse 2s infinite;
+    }
+
     .filter-indicator {
         background: var(--color-121213);
         border: 1px solid var(--color-232426);
@@ -380,23 +572,35 @@
         letter-spacing: 0.5px;
     }
 
-    /* Скролбар для всього контейнера */
-    .filters::-webkit-scrollbar {
-        width: 6px;
+    .test-btn {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: #4DE944;
+        color: #000;
+        border: none;
+        padding: 8px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        z-index: 1000;
     }
 
-    .filters::-webkit-scrollbar-track {
-        background: var(--color-131416);
-        border-radius: 3px;
-    }
-
-    .filters::-webkit-scrollbar-thumb {
-        background: var(--color-232426);
-        border-radius: 3px;
-    }
-
-    .filters::-webkit-scrollbar-thumb:hover {
-        background: var(--color-9b9ca3);
+    /* Анімації */
+    @keyframes pulse {
+        0% {
+            transform: scale(1);
+            opacity: 1;
+        }
+        50% {
+            transform: scale(1.05);
+            opacity: 0.8;
+        }
+        100% {
+            transform: scale(1);
+            opacity: 1;
+        }
     }
 
     /* Адаптивність */
@@ -422,5 +626,17 @@
             width: 100%;
             margin-bottom: 8px;
         }
+
+        .filter-hdr {
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .header-indicators {
+            flex-direction: column;
+            gap: 4px;
+            align-items: flex-end;
+        }
     }
 </style>
+

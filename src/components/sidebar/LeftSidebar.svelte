@@ -33,7 +33,8 @@
     >
         <img src={imgAnalyticss} alt="Analytics" />
     </div>
-    <div
+    <!--
+ <div
         class="block-bar settings {currentPath === '/widgets' ? 'active' : ''}"
         on:click={() => navigateTo("/widgets")}
         on:keydown={(e) => e.key === "Enter" && navigateTo("/widgets")}
@@ -42,6 +43,7 @@
     >
         <img src={imgWidget} alt="Widget" />
     </div>
+-->
     <div
         class="block-bar settings {currentPath === '/settings' ? 'active' : ''}"
         on:click={() => navigateTo("/settings")}

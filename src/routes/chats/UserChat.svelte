@@ -13,6 +13,7 @@
     export let onToggleFullscreen: () => void = () => {};
     export let isFullscreen: boolean = false;
     export let backgroundImage: string | null = null;
+    export let currentClientId: number = 1;
 
     // Типи для повідомлень з бази даних
     interface DatabaseMessage {
@@ -35,6 +36,7 @@
         timestamp: string;
         date: string;
         originalId: number;
+        isNew?: boolean;
     }
 
     // Статуси та їх кольори
@@ -45,7 +47,7 @@
         "no-info": { color: "#6b7280", label: "No Info" },
     };
 
-    // Генерація градієнта для аватара (точно така ж як в UserSelect)
+    // Генерація градієнта для аватара
     function generateGradient(): string {
         const colors = [
             "#fbbf24",
@@ -76,7 +78,7 @@
         return `linear-gradient(${angle}deg, ${color1}, ${color2})`;
     }
 
-    // Кешування градієнтів для кожного користувача (точно така ж логіка як в UserSelect)
+    // Кешування градієнтів для кожного користувача
     const gradientCache = new Map<string, string>();
     function getUserGradient(userId: string): string {
         if (!gradientCache.has(userId)) {
@@ -99,7 +101,10 @@
     let error: string | null = null;
     let newMessage: string = "";
     let messagesContainer: HTMLElement;
-    let realtimeSubscription: any = null;
+    let currentUserId: string = "";
+    let updateInterval: NodeJS.Timeout | null = null;
+    let lastMessageCount: number = 0;
+    let isAtBottom: boolean = true;
 
     // Стан для історії та Алари
     let showHistory: boolean = false;
@@ -107,11 +112,16 @@
     let showConfirmModal: boolean = false;
     let confirmAction: "enable" | "disable" | null = null;
 
-    // Функція для завантаження повідомлень з бази даних
-    async function loadMessages(): Promise<void> {
-        if (!selectedUser?.id) return;
+    // Змінні для роботи з повідомленнями
+    let sendingMessage: boolean = false;
+    let sendError: string | null = null;
 
-        loading = true;
+    // Функція для завантаження повідомлень з бази даних
+    async function loadMessages(silent: boolean = false): Promise<void> {
+        if (!selectedUser?.id) return;
+        if (!silent) {
+            loading = true;
+        }
         error = null;
 
         try {
@@ -125,18 +135,36 @@
                 throw fetchError;
             }
 
-            messages = convertDatabaseMessagesToDisplayMessages(data || []);
+            const newMessages = convertDatabaseMessagesToDisplayMessages(
+                data || [],
+            );
 
-            // Прокрутка до низу після завантаження
-            setTimeout(() => {
-                scrollToBottom();
-            }, 100);
+            // Перевіряємо чи є нові повідомлення
+            const hasNewMessages = newMessages.length > lastMessageCount;
+            lastMessageCount = newMessages.length;
+
+            // Оновлюємо повідомлення тільки якщо є зміни
+            if (JSON.stringify(messages) !== JSON.stringify(newMessages)) {
+                messages = newMessages;
+                // Прокручуємо до низу тільки якщо користувач був внизу або є нові повідомлення
+                if (isAtBottom || hasNewMessages) {
+                    setTimeout(() => {
+                        scrollToBottom();
+                    }, 50);
+                }
+            }
         } catch (err) {
             console.error("Error loading messages:", err);
-            error =
-                err instanceof Error ? err.message : "Failed to load messages";
+            if (!silent) {
+                error =
+                    err instanceof Error
+                        ? err.message
+                        : "Failed to load messages";
+            }
         } finally {
-            loading = false;
+            if (!silent) {
+                loading = false;
+            }
         }
     }
 
@@ -183,44 +211,104 @@
         return convertedMessages;
     }
 
+    // Функція для перевірки чи користувач внизу чату
+    function checkIfAtBottom(): void {
+        if (messagesContainer) {
+            const threshold = 100; // пікселів від низу
+            isAtBottom =
+                messagesContainer.scrollHeight -
+                    messagesContainer.scrollTop -
+                    messagesContainer.clientHeight <
+                threshold;
+        }
+    }
+
     // Функція для прокрутки до низу
     function scrollToBottom(): void {
         if (messagesContainer) {
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            isAtBottom = true;
         }
     }
 
-    // Функція для відправки повідомлення (тепер як відповідь бота)
+    // Add debouncing to prevent excessive updates
+    let updateTimeout: NodeJS.Timeout | null = null;
+    function debouncedLoadMessages(silent: boolean = false) {
+        if (updateTimeout) {
+            clearTimeout(updateTimeout);
+        }
+        updateTimeout = setTimeout(() => {
+            loadMessages(silent);
+        }, 100);
+    }
+
+    // Замініть існуючу функцію sendMessage на цю:
     async function sendMessage(): Promise<void> {
-        if (newMessage.trim() === "" || !selectedUser?.id) return;
+        if (newMessage.trim() === "" || !selectedUser?.id || sendingMessage)
+            return;
 
         const messageText = newMessage.trim();
         newMessage = "";
+        sendingMessage = true;
+        sendError = null;
 
         try {
-            // Додаємо повідомлення в базу даних як response (відповідь бота)
-            const { data, error: insertError } = await supabase
-                .from("messages")
-                .insert({
-                    client_id: 1, // Замініть на реальний client_id
-                    end_user_id: parseInt(selectedUser.id),
-                    response: messageText, // Зберігаємо як response замість content
-                    platform: selectedUser.platform,
-                    time: new Date().toISOString(),
-                    raw_payload: {},
-                })
-                .select()
-                .single();
+            console.log("Sending message:", {
+                userId: selectedUser.id,
+                message: messageText,
+                platform: selectedUser.platform,
+            });
 
-            if (insertError) {
-                throw insertError;
+            const response = await fetch(
+                "ngrok-сервер/send-message", // Заміни на свій URL, /send-message -> лишити
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "ngrok-skip-browser-warning": "true",
+                    },
+                    body: JSON.stringify({
+                        userId: parseInt(selectedUser.id),
+                        message: messageText,
+                        platform: selectedUser.platform,
+                    }),
+                },
+            );
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(
+                    errorData.error ||
+                        `HTTP ${response.status}: ${response.statusText}`,
+                );
             }
 
-            // Повідомлення буде додано автоматично через realtime subscription
+            const result = await response.json();
+            console.log("Server response:", result); // Додаємо логування відповіді сервера
+
+            if (result.success) {
+                console.log("Message sent successfully:", result);
+                if (result.delivery_status === "delivered") {
+                    console.log("✅ Message delivered to user");
+                } else {
+                    console.warn("⚠️ Message saved but delivery failed");
+                    sendError = "Message saved but delivery failed";
+                }
+            } else {
+                throw new Error(result.error || "Failed to send message");
+            }
+
+            // Оновлюємо повідомлення після відправки
+            setTimeout(() => {
+                loadMessages(true);
+            }, 500); // Невелика затримка для забезпечення збереження в БД
         } catch (err) {
             console.error("Error sending message:", err);
-            // Повертаємо текст назад у випадку помилки
+            sendError =
+                err instanceof Error ? err.message : "Failed to send message";
             newMessage = messageText;
+        } finally {
+            sendingMessage = false;
         }
     }
 
@@ -232,52 +320,23 @@
         }
     }
 
-    // Налаштування realtime підписки
-    function setupRealtimeSubscription(): void {
-        if (!selectedUser?.id) return;
-
-        realtimeSubscription = supabase
-            .channel(`messages-${selectedUser.id}`)
-            .on(
-                "postgres_changes",
-                {
-                    event: "*",
-                    schema: "public",
-                    table: "messages",
-                    filter: `end_user_id=eq.${selectedUser.id}`,
-                },
-                (payload) => {
-                    console.log("Realtime update:", payload);
-
-                    // Обробляємо INSERT події для автоматичного додавання повідомлень
-                    if (payload.eventType === "INSERT" && payload.new) {
-                        const newDbMessage = payload.new as DatabaseMessage;
-                        const newMessages =
-                            convertDatabaseMessagesToDisplayMessages([
-                                newDbMessage,
-                            ]);
-
-                        // Додаємо нові повідомлення до існуючих
-                        messages = [...messages, ...newMessages];
-
-                        // Прокручуємо до низу
-                        setTimeout(() => {
-                            scrollToBottom();
-                        }, 50);
-                    } else {
-                        // Для інших подій (UPDATE, DELETE) перезавантажуємо всі повідомлення
-                        loadMessages();
-                    }
-                },
-            )
-            .subscribe();
+    // Функція для запуску автоматичного оновлення
+    function startAutoUpdate(): void {
+        if (updateInterval) {
+            clearInterval(updateInterval);
+        }
+        updateInterval = setInterval(() => {
+            if (selectedUser?.id) {
+                loadMessages(true); // silent = true, щоб не показувати індикатор завантаження
+            }
+        }, 1000); // Оновлення кожну секунду
     }
 
-    // Очищення підписки
-    function cleanupRealtimeSubscription(): void {
-        if (realtimeSubscription) {
-            supabase.removeChannel(realtimeSubscription);
-            realtimeSubscription = null;
+    // Функція для зупинки автоматичного оновлення
+    function stopAutoUpdate(): void {
+        if (updateInterval) {
+            clearInterval(updateInterval);
+            updateInterval = null;
         }
     }
 
@@ -338,7 +397,7 @@
     $: userMessages = getUserMessages();
     $: groupedMessages = groupMessagesByDate(userMessages);
 
-    // Функція для отримання стилю фону з додатковими опціями
+    // Функція для отримання стилю фону
     function getChatBackgroundStyle(): string {
         if (backgroundImage) {
             return `
@@ -356,19 +415,41 @@
 
     // Lifecycle hooks
     onMount(() => {
+        console.log("UserChat mounted for user:", selectedUser.id);
+        currentUserId = selectedUser.id;
         loadMessages();
-        setupRealtimeSubscription();
+        startAutoUpdate();
+        // Додаємо слухач для відстеження прокрутки
+        if (messagesContainer) {
+            messagesContainer.addEventListener("scroll", checkIfAtBottom);
+        }
     });
 
     onDestroy(() => {
-        cleanupRealtimeSubscription();
+        console.log("UserChat destroyed");
+        stopAutoUpdate();
+        if (messagesContainer) {
+            messagesContainer.removeEventListener("scroll", checkIfAtBottom);
+        }
     });
 
-    // Перезавантаження при зміні користувача
-    $: if (selectedUser?.id) {
-        cleanupRealtimeSubscription();
-        loadMessages();
-        setupRealtimeSubscription();
+    // Реактивне оновлення при зміні користувача
+    $: if (selectedUser?.id && selectedUser.id !== currentUserId) {
+        console.log(`User changed from ${currentUserId} to ${selectedUser.id}`);
+        // Prevent multiple rapid changes
+        if (updateTimeout) {
+            clearTimeout(updateTimeout);
+        }
+        updateTimeout = setTimeout(() => {
+            currentUserId = selectedUser.id;
+            messages = [];
+            error = null;
+            sendError = null;
+            lastMessageCount = 0;
+            stopAutoUpdate();
+            loadMessages();
+            startAutoUpdate();
+        }, 200);
     }
 </script>
 
@@ -402,14 +483,20 @@
                 />
             </svg>
         </button>
-
         <div class="user-info">
             <div class="user-details">
-                <h2>{selectedUser.nickname}</h2>
+                <!-- Try different possible property names -->
+                <h2>
+                    {selectedUser.nickname ||
+                        selectedUser.name ||
+                        selectedUser.username ||
+                        selectedUser.display_name ||
+                        "Unknown User"}
+                </h2>
                 <div class="status">
                     <span class="status-text"
                         >{statusConfig[selectedUser.status]?.label ||
-                            "Unknown"}</span
+                            "no info"}</span
                     >
                     <div
                         class="status-indicator"
@@ -464,7 +551,10 @@
             {:else if error}
                 <div class="error-messages">
                     <p>Error loading messages: {error}</p>
-                    <button on:click={loadMessages} class="retry-button">
+                    <button
+                        on:click={() => loadMessages()}
+                        class="retry-button"
+                    >
                         Retry
                     </button>
                 </div>
@@ -474,7 +564,10 @@
                 </div>
             {:else}
                 {#each messages as message (message.id)}
-                    <div class="message {message.sender}">
+                    <div
+                        class="message {message.sender}"
+                        class:new-message={message.isNew}
+                    >
                         <!-- Аватар зліва для повідомлень користувача -->
                         {#if message.sender === "user"}
                             <div
@@ -510,36 +603,40 @@
             on:keydown={handleKeydown}
             placeholder="Write a message..."
             class="message-input"
-            disabled={loading}
+            disabled={loading || sendingMessage}
         />
         <button
             class="send-button"
             on:click={sendMessage}
-            disabled={newMessage.trim() === "" || loading}
+            disabled={newMessage.trim() === "" || loading || sendingMessage}
             aria-label="Send message"
         >
-            <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-            >
-                <path
-                    d="M22 2L11 13"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                />
-                <path
-                    d="M22 2L15 22L11 13L2 9L22 2Z"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                />
-            </svg>
+            {#if sendingMessage}
+                <div class="sending-spinner"></div>
+            {:else}
+                <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                >
+                    <path
+                        d="M22 2L11 13"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    />
+                    <path
+                        d="M22 2L15 22L11 13L2 9L22 2Z"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    />
+                </svg>
+            {/if}
         </button>
         <button
             class="history-button"
@@ -553,6 +650,16 @@
             />
         </button>
     </div>
+
+    <!-- Відображення помилки відправки -->
+    {#if sendError}
+        <div class="send-error">
+            <p>Error: {sendError}</p>
+            <button on:click={() => (sendError = null)} class="dismiss-error"
+                >×</button
+            >
+        </div>
+    {/if}
 </div>
 
 <!-- Панель історії -->

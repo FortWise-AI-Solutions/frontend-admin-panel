@@ -16,6 +16,7 @@
 
     async function handleSubmit() {
         if (!isFormValid) return;
+
         errorMessage = "";
         isLoading = true;
 
@@ -26,7 +27,6 @@
         try {
             for (const table of tablesToCheck) {
                 console.log(`Checking table: ${table}`);
-
                 const { data, error } = await supabase
                     .from(table)
                     .select("*")
@@ -46,15 +46,20 @@
             }
 
             const passwordMatches = String(user.password) === String(password);
-
             if (!passwordMatches) {
                 throw new Error("Incorrect password.");
             }
 
-            localStorage.setItem(
-                "user",
-                JSON.stringify({ ...user, table: tableMatched }),
-            );
+            // Створюємо об'єкт користувача з усіма необхідними даними
+            const userData = {
+                ...user,
+                table: tableMatched
+            };
+
+            // Логування для дебагу
+            console.log('Saving user data:', userData);
+
+            localStorage.setItem("user", JSON.stringify(userData));
 
             showWelcome = true;
             setTimeout(() => (showModal = false), 500);
@@ -74,6 +79,7 @@
     }
 </script>
 
+<!-- Решта коду залишається без змін -->
 {#if showModal}
     <div class="modal-backdrop" transition:fade={{ duration: 500 }}>
         <div class="modal-content">
@@ -92,7 +98,6 @@
                         disabled={isLoading}
                     />
                 </div>
-
                 <div class="form-group">
                     <label for="password">Password</label>
                     <input
@@ -123,20 +128,19 @@
     </div>
 {/if}
 
+<!-- Стилі залишаються без змін -->
 <style>
     .form-group {
         display: flex;
         flex-direction: column;
         margin-top: 30px;
     }
-
     form {
         display: flex;
         flex-direction: column;
         justify-content: center;
         color: var(--color-fff);
     }
-
     input {
         height: 76px;
         font-size: 22px;
@@ -151,18 +155,15 @@
             border-color 0.2s ease,
             background-color 0.2s ease;
     }
-
     input:focus {
         outline: none;
         border-color: var(--color-530549);
     }
-
     label {
         font-size: 16px;
         font-weight: 500;
         color: var(--color-fff);
     }
-
     img {
         width: 100%;
         height: 100%;
@@ -170,7 +171,6 @@
         max-height: 240px;
         margin: 0 auto;
     }
-
     button {
         margin-top: 30px;
         max-height: 76px;
@@ -184,26 +184,21 @@
         cursor: pointer;
         transition: background-color 0.3s ease;
     }
-
     button:hover:not(:disabled) {
         background-color: var(--color-8a0778);
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     }
-
     button.valid-form {
         background-color: var(--color-aa0795);
     }
-
     button.valid-form:hover:not(:disabled) {
         background-color: var(--color-8a0778);
         box-shadow: 0 4px 12px rgba(170, 7, 149, 0.4);
     }
-
     button:disabled {
         opacity: 0.7;
         cursor: not-allowed;
     }
-
     .modal-backdrop {
         position: fixed;
         top: 0;
@@ -216,17 +211,16 @@
         align-items: center;
         z-index: 1000;
     }
-
     .modal-content {
         background-color: var(--color-121211);
         padding: 2rem;
+        zoom: 0.84;
         border-radius: 8px;
         width: 90%;
         max-width: 400px;
         position: relative;
         border: 1px solid var(--color-232426);
     }
-
     .error-message {
         background-color: rgba(255, 0, 0, 0.1);
         color: #ff6b6b;
@@ -236,7 +230,6 @@
         text-align: center;
         border: 1px solid rgba(255, 107, 107, 0.3);
     }
-
     .welcome-container {
         display: flex;
         justify-content: center;
@@ -249,12 +242,10 @@
         left: 0;
         z-index: 1001;
     }
-
     .welcome-text-wrapper {
         position: relative;
         overflow: hidden;
     }
-
     .welcome-text {
         font-size: 30px;
         height: 100px;
@@ -280,152 +271,125 @@
             opacity 0.4s ease;
         margin: 0;
     }
-
     /* Адаптивність для ноутбуків */
     @media (max-width: 1366px) {
         .modal-content {
             max-width: 380px;
             padding: 1.8rem;
         }
-
         img {
             max-width: 220px;
             max-height: 220px;
         }
-
         .form-group {
             margin-top: 25px;
         }
-
         input {
             height: 70px;
             font-size: 20px;
             padding-left: 16px;
             padding-right: 16px;
         }
-
         button {
             font-size: 22px;
             padding: 22px;
             margin-top: 25px;
         }
-
         .welcome-text {
             font-size: 28px;
         }
     }
-
     @media (max-width: 1024px) {
         .modal-content {
             max-width: 350px;
             padding: 1.5rem;
         }
-
         img {
             max-width: 200px;
             max-height: 200px;
         }
-
         .form-group {
             margin-top: 20px;
         }
-
         input {
             height: 65px;
             font-size: 18px;
             padding-left: 14px;
             padding-right: 14px;
         }
-
         button {
             font-size: 20px;
             padding: 20px;
             margin-top: 20px;
         }
-
         .welcome-text {
             font-size: 26px;
         }
     }
-
     /* Адаптивність для планшетів */
     @media (max-width: 768px) {
         .modal-content {
             max-width: 320px;
             padding: 1.2rem;
         }
-
         img {
             max-width: 180px;
             max-height: 180px;
         }
-
         .form-group {
             margin-top: 18px;
         }
-
         input {
             height: 60px;
             font-size: 16px;
             padding-left: 12px;
             padding-right: 12px;
         }
-
         label {
             font-size: 14px;
         }
-
         button {
             font-size: 18px;
             padding: 18px;
             margin-top: 18px;
         }
-
         .welcome-text {
             font-size: 24px;
             letter-spacing: 1.5px;
         }
     }
-
     /* Адаптивність для мобільних */
     @media (max-width: 480px) {
         .modal-content {
             max-width: 280px;
             padding: 1rem;
         }
-
         img {
             max-width: 150px;
             max-height: 150px;
         }
-
         .form-group {
             margin-top: 15px;
         }
-
         input {
             height: 55px;
             font-size: 14px;
             padding-left: 10px;
             padding-right: 10px;
         }
-
         label {
             font-size: 13px;
         }
-
         button {
             font-size: 16px;
             padding: 16px;
             margin-top: 15px;
         }
-
         .welcome-text {
             font-size: 20px;
             letter-spacing: 1px;
         }
     }
-
     @keyframes appear {
         0% {
             opacity: 0;
@@ -436,7 +400,6 @@
             transform: translateY(0) scale(1);
         }
     }
-
     @keyframes disappear {
         0% {
             opacity: 1;
