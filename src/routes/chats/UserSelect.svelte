@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onMount, onDestroy } from "svelte";
     import { themeStore } from "../../lib/store/theme";
     import {
         getFilteredUsers,
@@ -7,7 +7,6 @@
     } from "../client-login/userService";
     import type { User } from "../../lib/types/type";
 
-    
     interface CurrentUserInfo {
         id: number;
         name: string;
@@ -18,7 +17,6 @@
         canViewAllUsers: boolean;
     }
 
-  
     interface UserWithMessages extends User {
         unreadCount?: number;
         lastMessageTime?: Date;
@@ -26,10 +24,12 @@
 
     export let selectedUserId: string | null = null;
     export let onUserSelect: (user: User) => void = () => {};
-    export let activePlatform: "WhatsApp" | "Telegram" | "Instagram" | null = null;
-    export let activeStatus: "Online" | "Offline" | "Human Required" | null = null;
+    export let activePlatform: "WhatsApp" | "Telegram" | "Instagram" | null =
+        null;
+    export let activeStatus: "Online" | "Offline" | "Human Required" | null =
+        null;
     export let clientId: number | undefined = undefined;
-    
+
     // Додаємо пропс для передачі інформації про нові повідомлення
     export let unreadMessages: Record<string, number> = {};
     export let lastMessageTimes: Record<string, Date> = {};
@@ -38,6 +38,9 @@
     let isLoading = true;
     let error: string | null = null;
     let currentUserInfo: CurrentUserInfo | null = getCurrentUserInfo();
+
+    // Додаємо змінну для зберігання інтервалу
+    let refreshInterval: NodeJS.Timeout | null = null;
 
     // Статуси та їх кольори
     const statusConfig: Record<string, { color: string; label: string }> = {
@@ -63,10 +66,24 @@
     // Генерація рандомного градієнта для аватара
     function generateGradient(): string {
         const colors = [
-            "#fbbf24", "#4DE944", "#8b5cf6", "#ec4899", "#3b82f6",
-            "#2097F0", "#D0523B", "#9B84BA", "#C48C55", "#B13EB0",
-            "#81589E", "#DAEBF9", "#D042C2", "#B85124", "#1F3C27",
-            "#E1B310", "#2CF2A1", "#FFFFFF",
+            "#fbbf24",
+            "#4DE944",
+            "#8b5cf6",
+            "#ec4899",
+            "#3b82f6",
+            "#2097F0",
+            "#D0523B",
+            "#9B84BA",
+            "#C48C55",
+            "#B13EB0",
+            "#81589E",
+            "#DAEBF9",
+            "#D042C2",
+            "#B85124",
+            "#1F3C27",
+            "#E1B310",
+            "#2CF2A1",
+            "#FFFFFF",
         ];
         const color1 = colors[Math.floor(Math.random() * colors.length)];
         let color2 = colors[Math.floor(Math.random() * colors.length)];
@@ -86,26 +103,62 @@
         return gradientCache.get(userId)!;
     }
 
+    // Функція для запуску інтервалу оновлення
+    function startRefreshInterval() {
+        // Очищуємо попередній інтервал, якщо він існує
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+        }
+
+        // Створюємо новий інтервал на 2 секунди
+        refreshInterval = setInterval(() => {
+            console.log("Auto-refreshing users...");
+            loadUsers();
+        }, 2000);
+    }
+
+    // Функція для зупинки інтервалу
+    function stopRefreshInterval() {
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+            refreshInterval = null;
+        }
+    }
+
     // Завантаження користувачів при монтуванні компонента
     onMount(async () => {
         await loadUsers();
+        startRefreshInterval();
+    });
+
+    // Очищення інтервалу при знищенні компонента
+    onDestroy(() => {
+        stopRefreshInterval();
     });
 
     async function loadUsers() {
         try {
-            isLoading = true;
+            // Не показуємо лоадер при автоматичному оновленні
+            if (!refreshInterval) {
+                isLoading = true;
+            }
             error = null;
-            console.log("Loading users for:", currentUserInfo, "clientId:", clientId);
-            
+            console.log(
+                "Loading users for:",
+                currentUserInfo,
+                "clientId:",
+                clientId,
+            );
+
             const loadedUsers = await getFilteredUsers(clientId);
-            
+
             // Додаємо інформацію про непрочитані повідомлення
-            users = loadedUsers.map(user => ({
+            users = loadedUsers.map((user) => ({
                 ...user,
                 unreadCount: unreadMessages[user.id] || 0,
-                lastMessageTime: lastMessageTimes[user.id]
+                lastMessageTime: lastMessageTimes[user.id],
             }));
-            
+
             console.log(`Loaded ${users.length} users`);
         } catch (err) {
             console.error("Error loading users:", err);
@@ -116,60 +169,61 @@
         }
     }
 
-   
     function handleUserSelect(user: UserWithMessages): void {
         selectedUserId = user.id;
         onUserSelect(user);
-        
-        
+
         if (user.unreadCount && user.unreadCount > 0) {
             unreadMessages[user.id] = 0;
             updateUserUnreadCount(user.id, 0);
         }
     }
 
-   
     function updateUserUnreadCount(userId: string, count: number) {
-        users = users.map(user => 
-            user.id === userId 
-                ? { ...user, unreadCount: count }
-                : user
+        users = users.map((user) =>
+            user.id === userId ? { ...user, unreadCount: count } : user,
         );
     }
 
-    
     function sortUsers(users: UserWithMessages[]): UserWithMessages[] {
         return [...users].sort((a, b) => {
             const aUnread = a.unreadCount || 0;
             const bUnread = b.unreadCount || 0;
-            
-           
+
+            // Спочатку сортуємо за кількістю непрочитаних повідомлень
             if (aUnread > 0 && bUnread > 0) {
                 return bUnread - aUnread;
             }
-            
-          
+
+            // Користувачі з непрочитаними повідомленнями йдуть першими
             if (aUnread > 0 && bUnread === 0) return -1;
             if (bUnread > 0 && aUnread === 0) return 1;
-            
-           
-           
+
+            // Потім сортуємо за часом останнього повідомлення
             if (a.lastMessageTime && b.lastMessageTime) {
-                return b.lastMessageTime.getTime() - a.lastMessageTime.getTime();
+                return (
+                    b.lastMessageTime.getTime() - a.lastMessageTime.getTime()
+                );
             }
-            
+
             return 0;
         });
     }
 
-    
+    // Додати в <script> секцію UserSelect.svelte
+    export let searchQuery: string = "";
+
+    // Оновити фільтрацію користувачів
     $: filteredAndSortedUsers = sortUsers(
         users.filter((user) => {
             let platformMatch = true;
             let statusMatch = true;
+            let searchMatch = true;
 
             if (activePlatform) {
-                const possiblePlatforms = platformMapping[activePlatform] || [activePlatform];
+                const possiblePlatforms = platformMapping[activePlatform] || [
+                    activePlatform,
+                ];
                 platformMatch = possiblePlatforms.includes(user.platform);
             }
 
@@ -178,16 +232,31 @@
                 statusMatch = user.status === mappedStatus;
             }
 
-            return platformMatch && statusMatch;
-        })
+            if (searchQuery.trim()) {
+                const query = searchQuery.toLowerCase().trim();
+                const searchableText = [
+                    user.nickname,
+                    user.name,
+                    user.username,
+                    user.phone,
+                    user.email,
+                ]
+                    .filter(Boolean)
+                    .join(" ")
+                    .toLowerCase();
+
+                searchMatch = searchableText.includes(query);
+            }
+
+            return platformMatch && statusMatch && searchMatch;
+        }),
     );
 
-    
     $: if (Object.keys(unreadMessages).length > 0) {
-        users = users.map(user => ({
+        users = users.map((user) => ({
             ...user,
             unreadCount: unreadMessages[user.id] || 0,
-            lastMessageTime: lastMessageTimes[user.id] || user.lastMessageTime
+            lastMessageTime: lastMessageTimes[user.id] || user.lastMessageTime,
         }));
     }
 
@@ -195,13 +264,15 @@
         loadUsers();
     }
 
-    
     export function refreshUsers() {
         loadUsers();
     }
 
-   
-    export function updateUnreadMessages(userId: string, count: number, lastMessageTime?: Date) {
+    export function updateUnreadMessages(
+        userId: string,
+        count: number,
+        lastMessageTime?: Date,
+    ) {
         unreadMessages[userId] = count;
         if (lastMessageTime) {
             lastMessageTimes[userId] = lastMessageTime;
@@ -209,20 +280,32 @@
         updateUserUnreadCount(userId, count);
     }
 
-  
+    // Додаємо функції для керування автооновленням
+    export function pauseAutoRefresh() {
+        stopRefreshInterval();
+    }
+
+    export function resumeAutoRefresh() {
+        startRefreshInterval();
+    }
+
     $: {
-        console.log('Filter Debug:', {
+        console.log("Filter Debug:", {
             activePlatform,
             activeStatus,
             totalUsers: users.length,
             filteredUsers: filteredAndSortedUsers.length,
-            userPlatforms: [...new Set(users.map(u => u.platform))],
-            userStatuses: [...new Set(users.map(u => u.status))],
-            unreadCounts: users.map(u => ({ id: u.id, unread: u.unreadCount }))
+            userPlatforms: [...new Set(users.map((u) => u.platform))],
+            userStatuses: [...new Set(users.map((u) => u.status))],
+            unreadCounts: users.map((u) => ({
+                id: u.id,
+                unread: u.unreadCount,
+            })),
         });
     }
 </script>
 
+<!-- Решта коду залишається без змін -->
 <div class="block-users">
     {#if isLoading}
         <div class="loading">
@@ -268,7 +351,7 @@
                     ></div>
                     {#if user.unreadCount && user.unreadCount > 0}
                         <div class="unread-badge">
-                            {user.unreadCount > 99 ? '99+' : user.unreadCount}
+                            {user.unreadCount > 99 ? "99+" : user.unreadCount}
                         </div>
                     {/if}
                 </div>
@@ -293,6 +376,7 @@
     {/if}
 </div>
 
+<!-- Стилі залишаються без змін -->
 <style>
     .block-users {
         display: flex;
@@ -332,7 +416,7 @@
     }
 
     .user.has-unread {
-        border-left: 3px solid #4DE944;
+        border-left: 3px solid #4de944;
     }
 
     .avatar-container {
@@ -354,7 +438,7 @@
         position: absolute;
         top: -6px;
         right: -6px;
-        background-color: #E94447;
+        background-color: #e94447;
         color: white;
         border-radius: 10px;
         min-width: 18px;
@@ -395,7 +479,7 @@
         margin-top: 2px;
     }
 
-       .status p {
+    .status p {
         margin: 0;
         font-size: 12px;
         color: var(--color-9b9ca3);
@@ -489,4 +573,3 @@
         animation: none;
     }
 </style>
-

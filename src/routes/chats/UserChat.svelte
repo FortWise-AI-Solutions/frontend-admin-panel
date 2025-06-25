@@ -260,7 +260,7 @@
             });
 
             const response = await fetch(
-                "ngrok-сервер/send-message", // Заміни на свій URL, /send-message -> лишити
+                "https://1141-2a01-14-8031-1a60-e9af-9f0c-f527-6ab9.ngrok-free.app/send-message", // Заміни на свій URL, /send-message -> лишити
                 {
                     method: "POST",
                     headers: {
@@ -1293,7 +1293,7 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 16px 20px;
+        padding: 19.5px 20px;
         border-bottom: 1px solid;
         transition: border-color 0.3s ease;
     }

@@ -42,7 +42,7 @@
     onMount(() => {
         // Ініціалізуємо WebSocket з'єднання для отримання нових повідомлень
         initializeWebSocket();
-        
+
         // Завантажуємо збережені непрочитані повідомлення з localStorage
         loadUnreadMessagesFromStorage();
 
@@ -56,10 +56,10 @@
     function initializeWebSocket() {
         try {
             // Замініть на ваш WebSocket URL
-            websocket = new WebSocket('ws://your-websocket-url');
-            
+            websocket = new WebSocket("ws://your-websocket-url");
+
             websocket.onopen = () => {
-                console.log('WebSocket connected');
+                console.log("WebSocket connected");
             };
 
             websocket.onmessage = (event) => {
@@ -67,12 +67,12 @@
                     const data = JSON.parse(event.data);
                     handleWebSocketMessage(data);
                 } catch (error) {
-                    console.error('Error parsing WebSocket message:', error);
+                    console.error("Error parsing WebSocket message:", error);
                 }
             };
 
             websocket.onclose = () => {
-                console.log('WebSocket disconnected');
+                console.log("WebSocket disconnected");
                 // Спробуємо перепідключитися через 5 секунд
                 setTimeout(() => {
                     initializeWebSocket();
@@ -80,51 +80,55 @@
             };
 
             websocket.onerror = (error) => {
-                console.error('WebSocket error:', error);
+                console.error("WebSocket error:", error);
             };
         } catch (error) {
-            console.error('Failed to initialize WebSocket:', error);
+            console.error("Failed to initialize WebSocket:", error);
         }
     }
 
     function handleWebSocketMessage(data: any) {
         switch (data.type) {
-            case 'new_message':
+            case "new_message":
                 handleNewMessage(data.userId, data.messageTime);
                 break;
-            case 'messages_read':
+            case "messages_read":
                 handleMessagesRead(data.userId);
                 break;
-            case 'bulk_messages':
+            case "bulk_messages":
                 handleBulkMessages(data.messages);
                 break;
             default:
-                console.log('Unknown message type:', data.type);
+                console.log("Unknown message type:", data.type);
         }
     }
 
     function handleNewMessage(userId: string, messageTime?: string) {
         unreadMessages[userId] = (unreadMessages[userId] || 0) + 1;
-        lastMessageTimes[userId] = messageTime ? new Date(messageTime) : new Date();
-        
+        lastMessageTimes[userId] = messageTime
+            ? new Date(messageTime)
+            : new Date();
+
         // Оновлюємо компонент UserSelect
         if (userSelectRef) {
             userSelectRef.updateUnreadMessages(
-                userId, 
-                unreadMessages[userId], 
-                lastMessageTimes[userId]
+                userId,
+                unreadMessages[userId],
+                lastMessageTimes[userId],
             );
         }
 
         // Зберігаємо в localStorage
         saveUnreadMessagesToStorage();
 
-        console.log(`New message for user ${userId}. Total unread: ${unreadMessages[userId]}`);
+        console.log(
+            `New message for user ${userId}. Total unread: ${unreadMessages[userId]}`,
+        );
     }
 
     function handleMessagesRead(userId: string) {
         unreadMessages[userId] = 0;
-        
+
         if (userSelectRef) {
             userSelectRef.updateUnreadMessages(userId, 0);
         }
@@ -133,18 +137,24 @@
         console.log(`Messages marked as read for user ${userId}`);
     }
 
-    function handleBulkMessages(messages: Array<{userId: string, count: number, lastMessageTime?: string}>) {
+    function handleBulkMessages(
+        messages: Array<{
+            userId: string;
+            count: number;
+            lastMessageTime?: string;
+        }>,
+    ) {
         messages.forEach(({ userId, count, lastMessageTime }) => {
             unreadMessages[userId] = count;
             if (lastMessageTime) {
                 lastMessageTimes[userId] = new Date(lastMessageTime);
             }
-            
+
             if (userSelectRef) {
                 userSelectRef.updateUnreadMessages(
-                    userId, 
-                    count, 
-                    lastMessageTimes[userId]
+                    userId,
+                    count,
+                    lastMessageTimes[userId],
                 );
             }
         });
@@ -154,21 +164,33 @@
 
     function saveUnreadMessagesToStorage() {
         try {
-            localStorage.setItem('unreadMessages', JSON.stringify(unreadMessages));
-            localStorage.setItem('lastMessageTimes', JSON.stringify(
-                Object.fromEntries(
-                    Object.entries(lastMessageTimes).map(([key, value]) => [key, value.toISOString()])
-                )
-            ));
+            localStorage.setItem(
+                "unreadMessages",
+                JSON.stringify(unreadMessages),
+            );
+            localStorage.setItem(
+                "lastMessageTimes",
+                JSON.stringify(
+                    Object.fromEntries(
+                        Object.entries(lastMessageTimes).map(([key, value]) => [
+                            key,
+                            value.toISOString(),
+                        ]),
+                    ),
+                ),
+            );
         } catch (error) {
-            console.error('Failed to save unread messages to localStorage:', error);
+            console.error(
+                "Failed to save unread messages to localStorage:",
+                error,
+            );
         }
     }
 
     function loadUnreadMessagesFromStorage() {
         try {
-            const savedUnread = localStorage.getItem('unreadMessages');
-            const savedTimes = localStorage.getItem('lastMessageTimes');
+            const savedUnread = localStorage.getItem("unreadMessages");
+            const savedTimes = localStorage.getItem("lastMessageTimes");
 
             if (savedUnread) {
                 unreadMessages = JSON.parse(savedUnread);
@@ -177,17 +199,24 @@
             if (savedTimes) {
                 const parsedTimes = JSON.parse(savedTimes);
                 lastMessageTimes = Object.fromEntries(
-                    Object.entries(parsedTimes).map(([key, value]) => [key, new Date(value as string)])
+                    Object.entries(parsedTimes).map(([key, value]) => [
+                        key,
+                        new Date(value as string),
+                    ]),
                 );
             }
         } catch (error) {
-            console.error('Failed to load unread messages from localStorage:', error);
+            console.error(
+                "Failed to load unread messages from localStorage:",
+                error,
+            );
         }
     }
 
     function selectFilter(type: "platform" | "status", value: string) {
         if (type === "platform") {
-            activePlatform = activePlatform === value ? null : (value as Platform);
+            activePlatform =
+                activePlatform === value ? null : (value as Platform);
         } else {
             activeStatus = activeStatus === value ? null : (value as Status);
         }
@@ -209,21 +238,23 @@
 
     function handleUserSelect(user: User): void {
         console.log("Вибрано користувача:", user);
-        
+
         // Скидаємо лічильник непрочитаних повідомлень для вибраного користувача
         if (unreadMessages[user.id] > 0) {
             handleMessagesRead(user.id);
-            
+
             // Відправляємо повідомлення на сервер про прочитання
             if (websocket && websocket.readyState === WebSocket.OPEN) {
-                websocket.send(JSON.stringify({
-                    type: 'mark_as_read',
-                    userId: user.id,
-                    timestamp: new Date().toISOString()
-                }));
+                websocket.send(
+                    JSON.stringify({
+                        type: "mark_as_read",
+                        userId: user.id,
+                        timestamp: new Date().toISOString(),
+                    }),
+                );
             }
         }
-        
+
         onUserSelect(user);
     }
 
@@ -235,7 +266,10 @@
     $: activeFiltersCount = (activePlatform ? 1 : 0) + (activeStatus ? 1 : 0);
 
     // Підраховуємо загальну кількість непрочитаних повідомлень
-    $: totalUnreadCount = Object.values(unreadMessages).reduce((sum, count) => sum + count, 0);
+    $: totalUnreadCount = Object.values(unreadMessages).reduce(
+        (sum, count) => sum + count,
+        0,
+    );
 
     // Експортуємо функції для використання ззовні
     export function addNewMessage(userId: string, messageTime?: Date) {
@@ -256,8 +290,35 @@
 
     // Функція для тестування (видаліть у продакшені)
     function simulateNewMessage() {
-        const testUserId = 'test-user-1';
+        const testUserId = "test-user-1";
         handleNewMessage(testUserId);
+    }
+
+    let searchQuery: string = "";
+    let isSearchExpanded: boolean = false;
+    let searchInputRef: HTMLInputElement;
+
+    // Додати функції для пошуку
+    function toggleSearch() {
+        isSearchExpanded = !isSearchExpanded;
+        if (isSearchExpanded) {
+            // Фокусуємося на input після анімації
+            setTimeout(() => {
+                searchInputRef?.focus();
+            }, 300);
+        } else {
+            searchQuery = "";
+        }
+    }
+
+    function handleSearchInput(event: Event) {
+        const target = event.target as HTMLInputElement;
+        searchQuery = target.value;
+    }
+
+    function clearSearch() {
+        searchQuery = "";
+        isSearchExpanded = false;
     }
 </script>
 
@@ -265,9 +326,7 @@
     <div class="filters">
         <div class="filter-hdr">
             <h1>Filters</h1>
-            {#if totalUnreadCount > 0}
-                
-            {/if}
+            {#if totalUnreadCount > 0}{/if}
             {#if activeFiltersCount > 0}
                 <button
                     class="clear-filters"
@@ -324,13 +383,64 @@
     <div class="select-user">
         <div class="users-header">
             <h2>Users</h2>
-            
+            <div class="search-container">
+                <div class="search-wrapper" class:expanded={isSearchExpanded}>
+                    {#if isSearchExpanded}
+                        <input
+                            bind:this={searchInputRef}
+                            type="text"
+                            placeholder="Search..."
+                            value={searchQuery}
+                            on:input={handleSearchInput}
+                            on:blur={() => {
+                                if (!searchQuery) {
+                                    setTimeout(() => {
+                                        isSearchExpanded = false;
+                                    }, 150);
+                                }
+                            }}
+                            class="search-input"
+                        />
+                    {/if}
+                    <button
+                        class="search-button"
+                        class:active={isSearchExpanded}
+                        on:click={toggleSearch}
+                        title={isSearchExpanded
+                            ? "Close search"
+                            : "Search users"}
+                    >
+                        <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                        >
+                            <circle
+                                cx="11"
+                                cy="11"
+                                r="8"
+                                stroke="currentColor"
+                                stroke-width="2"
+                            />
+                            <path
+                                d="m21 21-4.35-4.35"
+                                stroke="currentColor"
+                                stroke-width="2"
+                            />
+                        </svg>
+                    </button>
+                </div>
+            </div>
         </div>
+
         <div class="user-list-block">
             <UserSelect
                 bind:this={userSelectRef}
                 {activePlatform}
                 {activeStatus}
+                {searchQuery}
                 bind:selectedUserId
                 bind:unreadMessages
                 bind:lastMessageTimes
@@ -391,7 +501,7 @@
     }
 
     .unread-indicator {
-        background: #4DE944;
+        background: #4de944;
         color: #000;
         font-size: 10px;
         font-weight: 600;
@@ -441,7 +551,7 @@
         letter-spacing: 0.5px;
     }
 
-        .block-content {
+    .block-content {
         display: flex;
         align-items: center;
         gap: 8px;
@@ -459,8 +569,6 @@
     .block-content:hover {
         background-color: var(--color-232426);
     }
-
-
 
     .block-content.active .block-text {
         color: var(--color-ffffff);
@@ -541,50 +649,91 @@
         margin: 0;
         letter-spacing: 0.5px;
     }
-
-    .header-indicators {
+ 
+    .search-container {
         display: flex;
         align-items: center;
-        gap: 8px;
     }
 
-    .total-unread-badge {
-        background: #E94447;
-        color: #fff;
-        font-size: 10px;
-        font-weight: 600;
-        padding: 3px 6px;
-        border-radius: 10px;
-        min-width: 16px;
-        text-align: center;
-        animation: pulse 2s infinite;
-    }
-
-    .filter-indicator {
-        background: var(--color-121213);
+    .search-wrapper {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background-color: var(--color-121213);
         border: 1px solid var(--color-232426);
-        color: var(--color-ffffff);
-        font-size: 8px;
-        font-weight: 600;
-        padding: 4px 6px;
-        border-radius: 4px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        border-radius: 20px;
+        overflow: hidden;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        width: 26px;
+        height: 26px;
     }
 
-    .test-btn {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        background: #4DE944;
-        color: #000;
+    .search-wrapper.expanded {
+        width: 100%;
+        background-color: var(--color-131416);
+        border-color: var(--color-530549);
+    }
+
+    .search-input {
+        background: none;
         border: none;
-        padding: 8px 12px;
-        border-radius: 6px;
-        cursor: pointer;
+        outline: none;
+        color: var(--color-fff);
         font-size: 12px;
-        font-weight: 600;
-        z-index: 1000;
+        padding: 0 12px;
+        flex: 1;
+        opacity: 0;
+        animation: fadeIn 0.3s ease-in-out 0.1s forwards;
+    }
+
+    .search-input::placeholder {
+        color: var(--color-9b9ca3);
+    }
+
+    .search-button {
+        background: none;
+        border: none;
+        color: var(--color-9b9ca3);
+        cursor: pointer;
+        padding: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+        border-radius: 50%;
+        width: 28px;
+        height: 28px;
+        flex-shrink: 0;
+    }
+
+    .search-button:hover {
+        color: var(--color-fff);
+        background-color: var(--color-232426);
+    }
+
+    .search-button.active {
+        color: #fff;
+        background-color: var(--color-530549);
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
+    /* Адаптивність для пошуку */
+    @media (max-width: 768px) {
+        .search-wrapper.expanded {
+            width: 150px;
+        }
+
+        .users-header {
+            gap: 8px;
+        }
     }
 
     /* Анімації */
@@ -632,11 +781,5 @@
             gap: 4px;
         }
 
-        .header-indicators {
-            flex-direction: column;
-            gap: 4px;
-            align-items: flex-end;
-        }
     }
 </style>
-
