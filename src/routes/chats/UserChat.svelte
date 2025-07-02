@@ -1,12 +1,12 @@
 <script lang="ts">
     import type { User } from "../../lib/types/type";
-    import iconFC from "../../lib/images/full-screen-on.png";
-    import iconSC from "../../lib/images/full-screen-off.png";
     import hisIcon from "../../lib/images/history.png";
     import alara from "../../lib/images/alara.png";
+    import admin from "../../lib/images/admin.jpg";
     import { themeStore } from "../../lib/store/theme";
     import { supabase } from "../../lib/supabaseClient";
     import { onMount, onDestroy } from "svelte";
+    import { PUBLIC_WEB_SERVER } from "$env/static/public";
 
     export let selectedUser: User;
     export let onBackToList: () => void = () => {};
@@ -15,7 +15,6 @@
     export let backgroundImage: string | null = null;
     export let currentClientId: number = 1;
 
-    // Типи для повідомлень з бази даних
     interface DatabaseMessage {
         id: number;
         client_id: number;
@@ -26,26 +25,305 @@
         time: string | null;
         raw_payload: any;
         response: string | null;
+        is_written_by_alara: boolean | null;
     }
 
-    // Типи для відображення повідомлень
     interface Message {
         id: string;
         text: string;
-        sender: "user" | "bot";
+        sender: "user" | "bot" | "admin";
         timestamp: string;
         date: string;
         originalId: number;
         isNew?: boolean;
+        isWrittenByAlara?: boolean;
+        dbTimestamp: Date; // Додаємо оригінальний час з БД для сортування
     }
 
-    // Статуси та їх кольори
+    // Додаємо змінну для відстеження часу завантаження компонента, закоментував
+    //  let componentLoadTime: Date;
+
+    let rerenderTrigger: number = 0;
+    let rerenderInterval: NodeJS.Timeout | null = null;
+
+    let showTransferModal: boolean = false;
+    let showAlaraToggleModal: boolean = false;
+    let pendingAlaraAction: "enable" | "disable" | null = null;
+
+    // Додайте цю функцію для запуску ререндерингу
+    function startRerenderInterval(): void {
+        if (rerenderInterval) {
+            clearInterval(rerenderInterval);
+        }
+        rerenderInterval = setInterval(() => {
+            rerenderTrigger = Date.now();
+        }, 1000);
+    }
+
+    // Додайте цю функцію для зупинки ререндерингу
+    function stopRerenderInterval(): void {
+        if (rerenderInterval) {
+            clearInterval(rerenderInterval);
+            rerenderInterval = null;
+        }
+    }
+
+    // Оновіті статуси та їх кольори
     const statusConfig: Record<string, { color: string; label: string }> = {
-        "on-going": { color: "#4DE944", label: "Online" },
+        online: { color: "#4DE944", label: "Online" },
         offline: { color: "#E94447", label: "Offline" },
         "human-required": { color: "#E9D644", label: "Human Required" },
         "no-info": { color: "#6b7280", label: "No Info" },
     };
+
+    // Функція для розрахунку локального часу повідомлення
+    function calculateLocalMessageTime(
+        dbTimestamp: Date,
+        isNewMessage: boolean = false,
+    ): { timeString: string; dateString: string } {
+        let displayTime: Date;
+        if (isNewMessage) {
+            // Для нових повідомлень використовуємо поточний час
+            displayTime = new Date();
+        } else {
+            // Для існуючих повідомлень просто використовуємо час з БД як є
+            displayTime = new Date(dbTimestamp);
+        }
+
+        const timeString = displayTime.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+        });
+
+        const dateString = displayTime.toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+        });
+
+        return { timeString, dateString };
+    }
+
+    let userHumanRequired: boolean = false;
+
+    let transferringToAI: boolean = false;
+    let transferError: string | null = null;
+    $: isHumanRequired = userHumanRequired;
+
+    // Функція для отримання актуального статусу користувача з БД
+    async function fetchUserStatus(): Promise<void> {
+        if (!selectedUser?.id) return;
+
+        try {
+            const { data, error } = await supabase
+                .from("end_users")
+                .select("human_required")
+                .eq("id", parseInt(selectedUser.id))
+                .single();
+
+            if (error) {
+                console.error("Error fetching user status:", error);
+                return;
+            }
+
+            if (data) {
+                userHumanRequired = data.human_required || false;
+                console.log(
+                    `User ${selectedUser.id} human_required status:`,
+                    userHumanRequired,
+                );
+            }
+        } catch (err) {
+            console.error("Error fetching user status:", err);
+        }
+    }
+
+    function initiateTransferToAI(): void {
+        if (!selectedUser?.id || transferringToAI || !isHumanRequired) return;
+        showTransferModal = true;
+    }
+
+    async function confirmTransferToAI(): Promise<void> {
+        showTransferModal = false;
+
+        if (!selectedUser?.id || transferringToAI || !isHumanRequired) return;
+
+        transferringToAI = true;
+        transferError = null;
+
+        try {
+            console.log("Transferring user to AI:", selectedUser.id);
+            const response = await fetch(
+                `${PUBLIC_WEB_SERVER}/operator/transfer-to-ai`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "ngrok-skip-browser-warning": "true",
+                    },
+                    body: JSON.stringify({
+                        userId: parseInt(selectedUser.id),
+                    }),
+                },
+            );
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(
+                    errorData.error ||
+                        `HTTP ${response.status}: ${response.statusText}`,
+                );
+            }
+
+            const result = await response.json();
+            console.log("Transfer to AI response:", result);
+
+            if (result.success) {
+                console.log("✅ User transferred to AI successfully");
+                userHumanRequired = false;
+            }
+        } catch (err) {
+            console.error("Error transferring to AI:", err);
+            transferError =
+                err instanceof Error ? err.message : "Failed to transfer to AI";
+        } finally {
+            transferringToAI = false;
+        }
+    }
+
+    function cancelTransferToAI(): void {
+        showTransferModal = false;
+    }
+
+    let togglingAlara: boolean = false;
+    let alaraError: string | null = null;
+    let currentAlaraStatus: boolean = true;
+
+    function initiateAlaraToggle(): void {
+        if (!selectedUser?.id || togglingAlara) return;
+        pendingAlaraAction = currentAlaraStatus ? "disable" : "enable";
+        showAlaraToggleModal = true;
+    }
+
+    async function confirmAlaraToggle(): Promise<void> {
+        showAlaraToggleModal = false;
+
+        if (!selectedUser?.id || togglingAlara || !pendingAlaraAction) return;
+
+        const newStatus = pendingAlaraAction === "enable";
+        togglingAlara = true;
+        alaraError = null;
+
+        try {
+            const requestData = {
+                userId: parseInt(selectedUser.id),
+                alaraStatus: newStatus,
+            };
+
+            console.log("🔍 Sending request data:", requestData);
+
+            const response = await fetch(
+                `${PUBLIC_WEB_SERVER}/operator/toggle-alara-status`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "ngrok-skip-browser-warning": "true",
+                    },
+                    body: JSON.stringify(requestData),
+                },
+            );
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    result.error ||
+                        `HTTP ${response.status}: ${response.statusText}`,
+                );
+            }
+
+            if (result.success) {
+                currentAlaraStatus = newStatus;
+                console.log(
+                    `✅ Alara ${newStatus ? "enabled" : "disabled"} successfully`,
+                );
+            } else {
+                throw new Error(result.error || "Unknown error occurred");
+            }
+        } catch (err) {
+            console.error("🔴 Error toggling Alara status:", err);
+            alaraError =
+                err instanceof Error
+                    ? err.message
+                    : "Failed to toggle Alara status";
+        } finally {
+            togglingAlara = false;
+            pendingAlaraAction = null;
+        }
+    }
+
+    function cancelAlaraToggle(): void {
+        showAlaraToggleModal = false;
+        pendingAlaraAction = null;
+    }
+
+    // Функція для обробки клавіатури для модальних вікон
+    function handleTransferModalKeydown(event: KeyboardEvent): void {
+        if (event.key === "Escape") {
+            cancelTransferToAI();
+        }
+    }
+
+    function handleAlaraModalKeydown(event: KeyboardEvent): void {
+        if (event.key === "Escape") {
+            cancelAlaraToggle();
+        }
+    }
+
+    // Оновлена функція loadAlaraStatus з fallback на API
+    async function loadAlaraStatus(): Promise<void> {
+        if (!selectedUser?.id) return;
+
+        try {
+            // Спочатку пробуємо через Supabase
+            const { data, error } = await supabase
+                .from("end_users")
+                .select("alara_status")
+                .eq("id", parseInt(selectedUser.id))
+                .single();
+
+            if (error) {
+                // Якщо Supabase не працює, пробуємо через API
+                const response = await fetch(
+                    `${PUBLIC_WEB_SERVER}/operator/alara-status/${selectedUser.id}`,
+                    {
+                        headers: {
+                            "ngrok-skip-browser-warning": "true",
+                        },
+                    },
+                );
+
+                if (response.ok) {
+                    const result = await response.json();
+                    currentAlaraStatus = result.alaraStatus ?? true;
+                } else {
+                    throw error;
+                }
+            } else {
+                currentAlaraStatus = data?.alara_status ?? true;
+            }
+
+            console.log(
+                `Current Alara status for user ${selectedUser.id}:`,
+                currentAlaraStatus,
+            );
+        } catch (err) {
+            console.error("Error loading Alara status:", err);
+            currentAlaraStatus = true; // За замовчуванням
+        }
+    }
 
     // Генерація градієнта для аватара
     function generateGradient(): string {
@@ -87,13 +365,12 @@
         return gradientCache.get(userId)!;
     }
 
-    function getInitials(nickname: string): string {
-        return nickname
-            .split(" ")
-            .map((word: string) => word.charAt(0).toUpperCase())
-            .slice(0, 2)
-            .join("");
+    function getStatusInfo(status: string): { color: string; label: string } {
+        return statusConfig[status] || statusConfig["no-info"];
     }
+
+    // Додати цю реактивну змінну після існуючих реактивних змінних
+    $: statusInfo = getStatusInfo(selectedUser.status || "no-info");
 
     // Стан повідомлень та завантаження
     let messages: Message[] = [];
@@ -137,6 +414,7 @@
 
             const newMessages = convertDatabaseMessagesToDisplayMessages(
                 data || [],
+                silent, // передаємо інформацію про те, чи це оновлення
             );
 
             // Перевіряємо чи є нові повідомлення
@@ -144,7 +422,10 @@
             lastMessageCount = newMessages.length;
 
             // Оновлюємо повідомлення тільки якщо є зміни
-            if (JSON.stringify(messages) !== JSON.stringify(newMessages)) {
+            if (
+                JSON.stringify(messages.map((m) => m.id)) !==
+                JSON.stringify(newMessages.map((m) => m.id))
+            ) {
                 messages = newMessages;
                 // Прокручуємо до низу тільки якщо користувач був внизу або є нові повідомлення
                 if (isAtBottom || hasNewMessages) {
@@ -171,44 +452,65 @@
     // Конвертація повідомлень з бази даних у формат для відображення
     function convertDatabaseMessagesToDisplayMessages(
         dbMessages: DatabaseMessage[],
+        isUpdate: boolean = false,
     ): Message[] {
         const convertedMessages: Message[] = [];
+        const existingMessageIds = new Set(messages.map((m) => m.id));
 
         dbMessages.forEach((dbMsg) => {
-            const timestamp = dbMsg.time ? new Date(dbMsg.time) : new Date();
-            const timeString = timestamp.toLocaleTimeString("en-US", {
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false,
-            });
-            const dateString = timestamp.toLocaleDateString("en-US");
+            const dbTimestamp = dbMsg.time ? new Date(dbMsg.time) : new Date();
 
             // Додаємо повідомлення користувача
             if (dbMsg.content) {
+                const userMessageId = `${dbMsg.id}-user`;
+                const isNewMessage =
+                    isUpdate && !existingMessageIds.has(userMessageId);
+                const { timeString, dateString } = calculateLocalMessageTime(
+                    dbTimestamp,
+                    isNewMessage,
+                );
+
                 convertedMessages.push({
-                    id: `${dbMsg.id}-user`,
+                    id: userMessageId,
                     text: dbMsg.content,
                     sender: "user",
                     timestamp: timeString,
                     date: dateString,
                     originalId: dbMsg.id,
+                    dbTimestamp: dbTimestamp,
+                    isNew: isNewMessage,
                 });
             }
 
-            // Додаємо відповідь бота
+            // Додаємо відповідь (бот або адмін)
             if (dbMsg.response) {
+                const isFromAlara = dbMsg.is_written_by_alara !== false;
+                const responseMessageId = `${dbMsg.id}-${isFromAlara ? "bot" : "admin"}`;
+                const isNewMessage =
+                    isUpdate && !existingMessageIds.has(responseMessageId);
+                const { timeString, dateString } = calculateLocalMessageTime(
+                    dbTimestamp,
+                    isNewMessage,
+                );
+
                 convertedMessages.push({
-                    id: `${dbMsg.id}-bot`,
+                    id: responseMessageId,
                     text: dbMsg.response,
-                    sender: "bot",
+                    sender: isFromAlara ? "bot" : "admin",
                     timestamp: timeString,
                     date: dateString,
                     originalId: dbMsg.id,
+                    isWrittenByAlara: isFromAlara,
+                    dbTimestamp: dbTimestamp,
+                    isNew: isNewMessage,
                 });
             }
         });
 
-        return convertedMessages;
+        // Сортуємо за оригінальним часом з БД для правильного порядку
+        return convertedMessages.sort(
+            (a, b) => a.dbTimestamp.getTime() - b.dbTimestamp.getTime(),
+        );
     }
 
     // Функція для перевірки чи користувач внизу чату
@@ -260,7 +562,7 @@
             });
 
             const response = await fetch(
-                "https://1141-2a01-14-8031-1a60-e9af-9f0c-f527-6ab9.ngrok-free.app/send-message", // Заміни на свій URL, /send-message -> лишити
+                `${PUBLIC_WEB_SERVER}/operator/send-message`,
                 {
                     method: "POST",
                     headers: {
@@ -284,24 +586,35 @@
             }
 
             const result = await response.json();
-            console.log("Server response:", result); // Додаємо логування відповіді сервера
+            console.log("Server response:", result);
 
             if (result.success) {
                 console.log("Message sent successfully:", result);
-                if (result.delivery_status === "delivered") {
-                    console.log("✅ Message delivered to user");
+
+                // Якщо є delivery_status, перевіряємо його
+                if (result.delivery_status) {
+                    if (
+                        result.delivery_status === "delivered" ||
+                        result.delivery_status === "sent" ||
+                        result.delivery_status === "success"
+                    ) {
+                        console.log("✅ Message delivered to user");
+                    } else {
+                        console.warn(
+                            "⚠️ Unexpected delivery status:",
+                            result.delivery_status,
+                        );
+                        sendError = `Unexpected delivery status: ${result.delivery_status}`;
+                    }
                 } else {
-                    console.warn("⚠️ Message saved but delivery failed");
-                    sendError = "Message saved but delivery failed";
+                    // Якщо немає delivery_status, вважаємо що все ОК
+                    console.log("✅ Message processed successfully");
                 }
-            } else {
-                throw new Error(result.error || "Failed to send message");
             }
 
-            // Оновлюємо повідомлення після відправки
             setTimeout(() => {
                 loadMessages(true);
-            }, 500); // Невелика затримка для забезпечення збереження в БД
+            }, 500);
         } catch (err) {
             console.error("Error sending message:", err);
             sendError =
@@ -320,16 +633,17 @@
         }
     }
 
-    // Функція для запуску автоматичного оновлення
+    // включення перевірки статусу:
     function startAutoUpdate(): void {
         if (updateInterval) {
             clearInterval(updateInterval);
         }
         updateInterval = setInterval(() => {
             if (selectedUser?.id) {
-                loadMessages(true); // silent = true, щоб не показувати індикатор завантаження
+                loadMessages(true);
+                fetchUserStatus(); // Додайте цей рядок для періодичної перевірки статусу
             }
-        }, 1000); // Оновлення кожну секунду
+        }, 1000);
     }
 
     // Функція для зупинки автоматичного оновлення
@@ -345,24 +659,62 @@
         showHistory = !showHistory;
     }
 
+    // Функція для отримання повідомлень користувача
     function getUserMessages(): Message[] {
-        return messages.filter((msg) => msg.sender === "user");
+        return messages
+            .filter((msg) => msg.sender === "user")
+            .sort((a, b) => {
+                // Сортуємо по dbTimestamp для правильного порядку
+                const timeA = a.dbTimestamp
+                    ? new Date(a.dbTimestamp).getTime()
+                    : 0;
+                const timeB = b.dbTimestamp
+                    ? new Date(b.dbTimestamp).getTime()
+                    : 0;
+                return timeA - timeB;
+            });
     }
 
-    function groupMessagesByDate(
+    // Функція для групування повідомлень користувача по датах
+    function groupUserMessagesByDate(
         userMessages: Message[],
-    ): Record<string, Message[]> {
+    ): Array<{ date: string; messages: Message[] }> {
         const grouped = userMessages.reduce(
-            (acc: Record<string, Message[]>, msg: Message) => {
-                if (!acc[msg.date]) {
-                    acc[msg.date] = [];
+            (acc: Record<string, Message[]>, message) => {
+                if (!acc[message.date]) {
+                    acc[message.date] = [];
                 }
-                acc[msg.date].push(msg);
+                acc[message.date].push(message);
                 return acc;
             },
             {},
         );
-        return grouped;
+
+        return Object.entries(grouped).map(([date, msgs]) => ({
+            date,
+            messages: msgs,
+        }));
+    }
+
+    // Функція для групування повідомлень по датах
+    function groupMessagesByDate(
+        messages: Message[],
+    ): Array<{ date: string; messages: Message[] }> {
+        const grouped = messages.reduce(
+            (acc: Record<string, Message[]>, message) => {
+                if (!acc[message.date]) {
+                    acc[message.date] = [];
+                }
+                acc[message.date].push(message);
+                return acc;
+            },
+            {},
+        );
+
+        return Object.entries(grouped).map(([date, msgs]) => ({
+            date,
+            messages: msgs,
+        }));
     }
 
     // Функції для керування Аларою
@@ -396,6 +748,7 @@
     // Реактивні змінні
     $: userMessages = getUserMessages();
     $: groupedMessages = groupMessagesByDate(userMessages);
+    $: groupedAllMessages = groupMessagesByDate(messages);
 
     // Функція для отримання стилю фону
     function getChatBackgroundStyle(): string {
@@ -416,9 +769,12 @@
     // Lifecycle hooks
     onMount(() => {
         console.log("UserChat mounted for user:", selectedUser.id);
+        // Видаліть цю лінію: componentLoadTime = new Date();
         currentUserId = selectedUser.id;
+        fetchUserStatus();
         loadMessages();
         startAutoUpdate();
+        startRerenderInterval();
         // Додаємо слухач для відстеження прокрутки
         if (messagesContainer) {
             messagesContainer.addEventListener("scroll", checkIfAtBottom);
@@ -428,15 +784,14 @@
     onDestroy(() => {
         console.log("UserChat destroyed");
         stopAutoUpdate();
+        stopRerenderInterval();
         if (messagesContainer) {
             messagesContainer.removeEventListener("scroll", checkIfAtBottom);
         }
     });
 
-    // Реактивне оновлення при зміні користувача
     $: if (selectedUser?.id && selectedUser.id !== currentUserId) {
         console.log(`User changed from ${currentUserId} to ${selectedUser.id}`);
-        // Prevent multiple rapid changes
         if (updateTimeout) {
             clearTimeout(updateTimeout);
         }
@@ -446,8 +801,10 @@
             error = null;
             sendError = null;
             lastMessageCount = 0;
+            userHumanRequired = false; // Скидаємо статус
             stopAutoUpdate();
             loadMessages();
+            fetchUserStatus(); // Додайте цей рядок
             startAutoUpdate();
         }, 200);
     }
@@ -485,33 +842,138 @@
         </button>
         <div class="user-info">
             <div class="user-details">
-                <!-- Try different possible property names -->
-                <h2>
-                    {selectedUser.nickname ||
-                        selectedUser.name ||
-                        selectedUser.username ||
-                        selectedUser.display_name ||
-                        "Unknown User"}
-                </h2>
-                <div class="status">
-                    <span class="status-text"
-                        >{statusConfig[selectedUser.status]?.label ||
-                            "no info"}</span
-                    >
-                    <div
-                        class="status-indicator"
-                        style="background-color: {statusConfig[
-                            selectedUser.status
-                        ]?.color || '#6b7280'}"
-                    ></div>
-                </div>
+                {#key rerenderTrigger}
+                    <h2>
+                        {selectedUser.nickname ||
+                            selectedUser.name ||
+                            selectedUser.username ||
+                            selectedUser.display_name ||
+                            "Unknown User"}
+                    </h2>
+                    <div class="status">
+                        <span class="status-text">{statusInfo.label}</span>
+                        <div
+                            class="status-indicator"
+                            style="background-color: {statusInfo.color}"
+                        ></div>
+                    </div>
+                {/key}
             </div>
         </div>
-
         <div class="header-actions">
             <div class="platform-badge">
                 {selectedUser.platform}
             </div>
+
+            <button
+                class="alara-toggle-button"
+                class:enabled={currentAlaraStatus}
+                class:disabled={!currentAlaraStatus}
+                on:click={initiateAlaraToggle}
+                disabled={togglingAlara}
+                aria-label={currentAlaraStatus
+                    ? "Disable Alara"
+                    : "Enable Alara"}
+                title={currentAlaraStatus
+                    ? "Put Alara to sleep"
+                    : "Wake up Alara"}
+            >
+                {#if togglingAlara}
+                    <div class="alara-spinner"></div>
+                {:else}
+                    <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                    >
+                        {#if currentAlaraStatus}
+                            <!-- Sleep/Off icon - простий кружок з лінією -->
+                            <circle
+                                cx="8"
+                                cy="8"
+                                r="6"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                fill="none"
+                            />
+                            <line
+                                x1="5"
+                                y1="8"
+                                x2="11"
+                                y2="8"
+                                stroke="currentColor"
+                                stroke-width="2"
+                            />
+                        {:else}
+                            <!-- Active/On icon - кружок з крапкою -->
+                            <circle
+                                cx="8"
+                                cy="8"
+                                r="6"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                fill="none"
+                            />
+                            <circle cx="8" cy="8" r="2" fill="currentColor" />
+                        {/if}
+                    </svg>
+                {/if}
+                <span>{currentAlaraStatus ? "Sleep Alara" : "Wake Alara"}</span>
+            </button>
+
+            <!-- Відображення помилки Alara статусу -->
+            {#if alaraError}
+                <div class="alara-error">
+                    <p>Alara Error: {alaraError}</p>
+                    <button
+                        on:click={() => (alaraError = null)}
+                        class="dismiss-error">×</button
+                    >
+                </div>
+            {/if}
+
+            <button
+                class="transfer-ai-button"
+                class:inactive={!isHumanRequired}
+                on:click={initiateTransferToAI}
+                disabled={transferringToAI || !isHumanRequired}
+                aria-label="Transfer to AI"
+                title={isHumanRequired
+                    ? "Transfer user back to AI bot"
+                    : "User is already handled by AI"}
+            >
+                {#if transferringToAI}
+                    <div class="transfer-spinner"></div>
+                {:else}
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <path
+                            d="M12 2L2 7L12 12L22 7L12 2Z"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        />
+                        <path
+                            d="M2 17L12 22L22 17"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        />
+                        <path
+                            d="M2 12L12 17L22 12"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        />
+                    </svg>
+                {/if}
+                <span>To Alara</span>
+            </button>
+
             <!-- Кнопка повноекранного режиму -->
             <button
                 class="fullscreen-button"
@@ -523,24 +985,55 @@
             >
                 {#if isFullscreen}
                     <!-- Іконка виходу з повноекранного режиму -->
-                    <img
-                        src={iconSC}
-                        alt="Exit fullscreen"
-                        style="width: 20px; height: 20px;"
-                    />
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <path d="M9 9L5 5M5 5v4M5 5h4M15 15l4 4m0-4v4m0 0h-4" />
+                    </svg>
                 {:else}
                     <!-- Іконка входу в повноекранний режим -->
-                    <img
-                        src={iconFC}
-                        alt="Enter fullscreen"
-                        style="width: 20px; height: 20px;"
-                    />
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <path
+                            d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"
+                        />
+                    </svg>
+                {/if}
+
+                {#if transferError}
+                    <div class="transfer-error">
+                        <p>Transfer Error: {transferError}</p>
+                        <button
+                            on:click={() => (transferError = null)}
+                            class="dismiss-error"
+                        >
+                            ×
+                        </button>
+                    </div>
                 {/if}
             </button>
         </div>
     </div>
 
     <div class="chat-content">
+        <!-- Область повідомлень -->
         <!-- Область повідомлень -->
         <div class="messages-container" bind:this={messagesContainer}>
             {#if loading}
@@ -563,33 +1056,48 @@
                     <p>No messages yet. Start a conversation!</p>
                 </div>
             {:else}
-                {#each messages as message (message.id)}
-                    <div
-                        class="message {message.sender}"
-                        class:new-message={message.isNew}
-                    >
-                        <!-- Аватар зліва для повідомлень користувача -->
-                        {#if message.sender === "user"}
-                            <div
-                                class="avatar"
-                                style="background: {getUserGradient(
-                                    selectedUser.id,
-                                )}"
-                            ></div>
-                        {/if}
-                        <div class="message-content">
-                            <p>{message.text}</p>
-                            <span class="timestamp">{message.timestamp}</span>
-                        </div>
-                        <!-- Аватар справа для повідомлень бота -->
-                        {#if message.sender === "bot"}
-                            <div
-                                class="avatar"
-                                style:background-image={`url('${alara}')`}
-                                style:background-size="cover"
-                            ></div>
-                        {/if}
+                {#each groupedAllMessages as { date, messages: dayMessages }}
+                    <div class="date-separator">
+                        <span class="date-label">{date}</span>
                     </div>
+                    {#each dayMessages as message (message.id)}
+                        <div
+                            class="message {message.sender}"
+                            class:new-message={message.isNew}
+                        >
+                            <!-- Аватар зліва для повідомлень користувача -->
+                            {#if message.sender === "user"}
+                                <div
+                                    class="avatar"
+                                    style="background: {getUserGradient(
+                                        selectedUser.id,
+                                    )}"
+                                ></div>
+                            {/if}
+                            <div class="message-content">
+                                <p>{message.text}</p>
+                                <span class="timestamp"
+                                    >{message.timestamp}</span
+                                >
+                            </div>
+                            <!-- Аватар справа для повідомлень бота -->
+                            {#if message.sender === "bot"}
+                                <div
+                                    class="avatar"
+                                    style:background-image={`url('${alara}')`}
+                                    style:background-size="cover"
+                                ></div>
+                            {/if}
+
+                            {#if message.sender === "admin"}
+                                <div
+                                    class="avatar"
+                                    style:background-image={`url('${admin}')`}
+                                    style:background-size="cover"
+                                ></div>
+                            {/if}
+                        </div>
+                    {/each}
                 {/each}
             {/if}
         </div>
@@ -671,14 +1179,22 @@
         class:light={$themeStore === "light"}
     >
         <div class="history-header">
-            <button
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <h3>Chat History (User Messages)</h3>
+                <img
+                    src={hisIcon}
+                    alt=""
+                    style="width: 16px; height: 16px; margin-top: 2px;"
+                />
+            </div>
+            <!-- <button
                 class="alara-toggle-button"
                 class:enabled={isAlaraEnabled}
                 class:disabled={!isAlaraEnabled}
                 on:click={handleAlaraToggle}
             >
                 {isAlaraEnabled ? "Turn Off Alara" : "Turn On Alara"}
-            </button>
+            </button>-->
             <button
                 class="close-history-button"
                 on:click={toggleHistory}
@@ -695,43 +1211,97 @@
             </button>
         </div>
         <div class="history-content">
-            <div style="display: flex; align-items: flex-start; gap: 8px;">
-                <h3>Chat History</h3>
-                <img
-                    src={hisIcon}
-                    alt=""
-                    style="width: 16px; height: 16px; margin-top: 2px;"
-                />
-            </div>
-            {#if userMessages.length === 0}
-                <p class="no-history">No user messages yet.</p>
-            {:else}
-                {#each Object.entries(groupedMessages) as [date, msgs]}
-                    <div class="date-group">
-                        <div class="date-header">{date}</div>
-                        {#each msgs as msg}
-                            <div class="history-message">
-                                <span class="history-timestamp"
-                                    >{msg.timestamp}</span
-                                >
-                                <p class="history-text">{msg.text}</p>
+            <div class="chat-content-history">
+                <div class="messages-container-history">
+                    {#if loading}
+                        <div class="loading-messages">
+                            <div class="loading-spinner"></div>
+                            <p>Loading messages...</p>
+                        </div>
+                    {:else if error}
+                        <div class="error-messages">
+                            <p>Error loading messages: {error}</p>
+                            <button
+                                on:click={() => loadMessages()}
+                                class="retry-button"
+                            >
+                                Retry
+                            </button>
+                        </div>
+                    {:else if messages.length === 0}
+                        <div class="no-messages">
+                            <p>No messages yet. Start a conversation!</p>
+                        </div>
+                    {:else}
+                        {#each groupedAllMessages as { date, messages: dayMessages }}
+                            <div class="date-separator">
+                                <span class="date-label">{date}</span>
                             </div>
+                            {#each dayMessages as message (message.id)}
+                                {#if message.sender === "user"}
+                                    <div class="history-message-item">
+                                        <div class="message-content-history">
+                                            <p>{message.text}</p>
+                                            <span class="timestamp"
+                                                >{message.timestamp}</span
+                                            >
+                                        </div>
+                                    </div>
+                                {/if}
+                            {/each}
                         {/each}
-                    </div>
-                {/each}
-            {/if}
+                    {/if}
+                </div>
+            </div>
         </div>
     </div>
 {/if}
 
-<!-- Модальне вікно підтвердження -->
-{#if showConfirmModal}
+<!-- Модальне вікно підтвердження передачі до AI -->
+{#if showTransferModal}
     <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div
         class="modal-overlay"
-        on:click={cancelAlaraAction}
-        on:keydown={handleModalKeydown}
+        on:click={cancelTransferToAI}
+        on:keydown={handleTransferModalKeydown}
+        role="dialog"
+        aria-modal="true"
+    >
+        <!-- svelte-ignore a11y-click-events-have-key-events -->
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <div
+            class="modal-content"
+            class:dark={$themeStore === "dark"}
+            class:light={$themeStore === "light"}
+            on:click|stopPropagation
+            role="document"
+        >
+            <h3>Transfer user to Alara?</h3>
+            <p>
+                This user will be transferred back to AI bot (Alara) for
+                automatic responses
+            </p>
+            <div class="modal-actions">
+                <button class="cancel-button" on:click={cancelTransferToAI}>
+                    Cancel
+                </button>
+                <button class="confirm-button" on:click={confirmTransferToAI}>
+                    Yes, I want
+                </button>
+            </div>
+        </div>
+    </div>
+{/if}
+
+<!-- Модальне вікно підтвердження зміни статусу Alara -->
+{#if showAlaraToggleModal}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div
+        class="modal-overlay"
+        on:click={cancelAlaraToggle}
+        on:keydown={handleAlaraModalKeydown}
         role="dialog"
         aria-modal="true"
     >
@@ -745,23 +1315,21 @@
             role="document"
         >
             <h3>
-                {confirmAction === "disable"
-                    ? "Stop Alara for this chat?"
-                    : "Turn on Alara for this chat?"}
+                {pendingAlaraAction === "disable"
+                    ? "Put Alara to sleep for this chat?"
+                    : "Wake up Alara for this chat?"}
             </h3>
             <p>
-                {confirmAction === "disable"
-                    ? "Alara will stop responding to messages in this chat"
-                    : "Alara will start responding to messages in this chat again"}
+                {pendingAlaraAction === "disable"
+                    ? "Alara will stop responding to messages in this chat. The user will only receive responses from human operators"
+                    : "Alara will start responding to messages in this chat again automatically."}
             </p>
             <div class="modal-actions">
-                <button class="cancel-button" on:click={cancelAlaraAction}>
+                <button class="cancel-button" on:click={cancelAlaraToggle}>
                     Cancel
                 </button>
-                <button class="confirm-button" on:click={confirmAlaraAction}>
-                    {confirmAction === "disable"
-                        ? "Yes, turn off"
-                        : "Yes, turn on"}
+                <button class="confirm-button" on:click={confirmAlaraToggle}>
+                    Yes, I want
                 </button>
             </div>
         </div>
@@ -779,6 +1347,64 @@
         transition:
             background-color 0.3s ease,
             color 0.3s ease;
+    }
+
+    .history-message.user {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin-bottom: 12px;
+        padding: 8px;
+        border-radius: 8px;
+        background: var(--user-message-bg, #f3f4f6);
+    }
+
+    .dark .history-message.user {
+        background: #374151;
+    }
+
+    .history-message .avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    .history-message .message-content {
+        flex: 1;
+    }
+
+    .history-message .message-content p {
+        margin: 0 0 4px 0;
+        color: var(--text-primary);
+        font-size: 14px;
+        line-height: 1.4;
+    }
+
+    .history-message .timestamp {
+        font-size: 11px;
+        color: var(--text-secondary);
+        opacity: 0.7;
+    }
+
+    .date-group {
+        margin-bottom: 16px;
+    }
+
+    .date-header {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        margin-bottom: 8px;
+        padding: 4px 8px;
+        background: var(--bg-secondary);
+        border-radius: 4px;
+        text-align: center;
+    }
+
+    .dark .date-header {
+        background: #1f2937;
+        color: #9ca3af;
     }
 
     /* Темна тема */
@@ -818,6 +1444,150 @@
     .message-input-container {
         position: relative;
         z-index: 1;
+    }
+
+    .date-separator {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 20px 0 10px 0;
+        position: relative;
+    }
+
+    .date-separator::before {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: var(--border-color, #e5e7eb);
+        margin-right: 16px;
+    }
+
+    /* Додати ці стилі до існуючих стилів панелі історії */
+
+    /* Основні стилі для панелі історії з темами */
+    .history-panel.dark .history-content {
+        color: #fff;
+    }
+
+    .history-panel.light .history-content {
+        color: #1a1a1a;
+    }
+
+    /* Стилі для повідомлень в історії */
+    .history-panel.dark .message-content-history {
+        background-color: #2a2a2a;
+        color: #fff;
+    }
+
+    .history-panel.light .message-content-history {
+        background-color: #f3f4f6;
+        color: #1a1a1a;
+    }
+
+    .history-panel.dark .message-content-history p {
+        color: #fff;
+    }
+
+    .history-panel.light .message-content-history p {
+        color: #1a1a1a;
+    }
+
+    /* Стилі для timestamp в історії */
+    .history-panel.dark .message-content-history .timestamp {
+        color: #9b9ca3;
+    }
+
+    .history-panel.light .message-content-history .timestamp {
+        color: #6b7280;
+    }
+
+    /* Стилі для date-separator в історії */
+    .history-panel.dark .date-separator::before,
+    .history-panel.dark .date-separator::after {
+        background: #374151;
+    }
+
+    .history-panel.light .date-separator::before,
+    .history-panel.light .date-separator::after {
+        background: #e5e7eb;
+    }
+
+    .history-panel.dark .date-label {
+        background: #1f2937;
+        color: #9ca3af;
+    }
+
+    .history-panel.light .date-label {
+        background: #5190ee8f;
+        color: #ffffff;
+    }
+
+    /* Стилі для скролбару в історії */
+    .history-panel.dark .chat-content-history::-webkit-scrollbar-thumb {
+        background-color: #555;
+    }
+
+    .history-panel.light .chat-content-history::-webkit-scrollbar-thumb {
+        background-color: #888;
+    }
+
+    .history-panel.dark .chat-content-history::-webkit-scrollbar-track {
+        background: #2a2a2a;
+    }
+
+    .history-panel.light .chat-content-history::-webkit-scrollbar-track {
+        background: #f5f5f5;
+    }
+
+    /* Стилі для loading, error, no-messages в історії */
+    .history-panel.dark .loading-messages,
+    .history-panel.dark .error-messages,
+    .history-panel.dark .no-messages {
+        color: #fff;
+    }
+
+    .history-panel.light .loading-messages,
+    .history-panel.light .error-messages,
+    .history-panel.light .no-messages {
+        color: #1a1a1a;
+    }
+
+    .history-panel.dark .loading-spinner {
+        border-color: #444;
+        border-top-color: transparent;
+    }
+
+    .history-panel.light .loading-spinner {
+        border-color: #d1d5db;
+        border-top-color: transparent;
+    }
+
+    .date-separator::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: var(--border-color, #e5e7eb);
+        margin-left: 16px;
+    }
+
+    .date-label {
+        background: #5190ee8f;
+        color: #fff;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+        white-space: nowrap;
+    }
+
+    .dark .date-separator::before,
+    .dark .date-separator::after {
+        background: #374151;
+    }
+
+    .dark .date-label {
+        background: #1f2937;
+        color: #9ca3af;
     }
 
     .chat-container.fullscreen {
@@ -952,9 +1722,10 @@
     .platform-badge {
         border: 1px solid;
         border-radius: 4px;
-        padding: 4px 8px;
+        padding: 6px 10px;
         font-size: 12px;
         font-weight: 500;
+        text-transform: capitalize;
         transition:
             border-color 0.3s ease,
             color 0.3s ease;
@@ -967,14 +1738,14 @@
 
     .chat-container.light .platform-badge {
         border-color: #d1d5db;
-        color: #1a1a1a;
+        color: #374151;
     }
 
     .fullscreen-button {
         background: none;
         border: none;
         cursor: pointer;
-        padding: 8px;
+        padding: 4.5px;
         border-radius: 4px;
         transition:
             background-color 0.2s ease,
@@ -988,17 +1759,12 @@
         color: #fff;
     }
 
-    .chat-container.light .fullscreen-button {
-        color: #1a1a1a;
-        background-color: #9d97c4;
-    }
-
     .chat-container.dark .fullscreen-button:hover {
         background-color: #444;
     }
 
     .chat-container.light .fullscreen-button:hover {
-        background-color: #453d80;
+        background-color: #e2e2e2;
     }
 
     .chat-content {
@@ -1008,6 +1774,29 @@
         flex-direction: column;
         max-height: 100%;
         overflow-y: auto;
+    }
+
+    .chat-content-history {
+        padding-bottom: 0%;
+    }
+
+    /* Chrome, Edge, Safari */
+    .chat-content-history::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .chat-content-history::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .chat-content-history::-webkit-scrollbar-thumb {
+        background-color: #888;
+        border-radius: 4px;
+        border: 2px solid transparent;
+    }
+
+    .chat-content-history::-webkit-scrollbar-thumb:hover {
+        background-color: #666;
     }
 
     .messages-container {
@@ -1020,6 +1809,16 @@
         gap: 16px;
 
         scrollbar-width: none; /* Firefox: сховати скрол */
+    }
+
+    .messages-container-history {
+        flex: 1;
+        height: 100%;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        overflow-y: auto;
     }
 
     /* Приховати скролбар у WebKit браузерах */
@@ -1073,6 +1872,15 @@
         transition: background-color 0.3s ease;
     }
 
+    .message-content-history {
+        padding: 12px 16px;
+        border-radius: 10px;
+        position: relative;
+        background-color: #1f2937;
+        flex: 1;
+        transition: background-color 0.3s ease;
+    }
+
     .chat-container.dark .message.user .message-content {
         background-color: #2a2a2a;
     }
@@ -1090,6 +1898,15 @@
     }
 
     .message-content p {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.4;
+        margin-bottom: 4px;
+        word-wrap: break-word;
+        transition: color 0.3s ease;
+    }
+
+    .message-content-history p {
         margin: 0;
         font-size: 14px;
         line-height: 1.4;
@@ -1251,7 +2068,7 @@
 
     .send-button:hover:not(:disabled),
     .history-button:hover {
-        background-color: #800d70;
+        background-color: var(--color-8a0778);
     }
 
     .send-button:disabled {
@@ -1264,7 +2081,7 @@
         top: 0;
         right: -400px;
         width: 400px;
-        height: 100vh;
+        height: 100%;
         border-left: 1px solid;
         display: flex;
         flex-direction: column;
@@ -1293,7 +2110,7 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 19.5px 20px;
+        padding: 24.5px 20px;
         border-bottom: 1px solid;
         transition: border-color 0.3s ease;
     }
@@ -1367,7 +2184,10 @@
     .history-content {
         flex: 1;
         padding: 20px;
+        height: 100%;
         overflow-y: auto;
+        scrollbar-width: thin; /* для Firefox */
+        scrollbar-color: #88888800 transparent; /* колір треку та ползунка */
     }
 
     .history-content h3 {
@@ -1525,50 +2345,87 @@
         justify-content: flex-end;
     }
 
+    /* Загальні стилі для кнопок */
     .cancel-button,
     .confirm-button {
         padding: 8px 16px;
-        border: none;
         border-radius: 6px;
         font-size: 14px;
+        font-weight: 500;
         cursor: pointer;
-        transition: background-color 0.2s ease;
+        border: 1px solid transparent;
+        transition:
+            background-color 0.25s ease,
+            color 0.25s ease,
+            border-color 0.25s ease;
     }
 
+    /* ===== Cancel Button ===== */
     .cancel-button {
         background-color: transparent;
-        border: 1px solid;
-        transition:
-            background-color 0.2s ease,
-            border-color 0.3s ease,
-            color 0.3s ease;
+        color: #ef4444;
+        border-color: #ef4444;
     }
 
-    .modal-content.dark .cancel-button {
-        border-color: #444;
-        color: #fff;
+    .cancel-button:hover {
+        background-color: #ef444410;
+        border-color: #ef4444;
     }
 
-    .modal-content.light .cancel-button {
-        border-color: #d1d5db;
-        color: #1a1a1a;
-    }
-
-    .modal-content.dark .cancel-button:hover {
-        background-color: #444;
-    }
-
-    .modal-content.light .cancel-button:hover {
-        background-color: #f9f9fb;
-    }
-
+    /* ===== Confirm Button ===== */
     .confirm-button {
-        background-color: #ef4444;
+        background-color: #2563eb;
         color: white;
+        border-color: #2563eb;
     }
 
     .confirm-button:hover {
-        background-color: #dc2626;
+        background-color: #1e40af;
+        border-color: #1e40af;
+    }
+
+    /* ===== Темна тема ===== */
+    .modal-content.dark .cancel-button {
+        background-color: transparent;
+        color: #f87171;
+        border-color: #f87171;
+    }
+
+    .modal-content.dark .cancel-button:hover {
+        background-color: #f8717115;
+    }
+
+    .modal-content.dark .confirm-button {
+        background-color: #3b82f6;
+        color: white;
+        border-color: #3b82f6;
+    }
+
+    .modal-content.dark .confirm-button:hover {
+        background-color: #1d4ed8;
+        border-color: #1d4ed8;
+    }
+
+    /* ===== Світла тема ===== */
+    .modal-content.light .cancel-button {
+        background-color: transparent;
+        color: #dc2626;
+        border-color: #dc2626;
+    }
+
+    .modal-content.light .cancel-button:hover {
+        background-color: #dc262610;
+    }
+
+    .modal-content.light .confirm-button {
+        background-color: #2563eb;
+        color: white;
+        border-color: #2563eb;
+    }
+
+    .modal-content.light .confirm-button:hover {
+        background-color: #1d4ed8;
+        border-color: #1d4ed8;
     }
 
     .connection-status {
@@ -1718,6 +2575,289 @@
         .modal-content {
             margin: 20px;
             padding: 20px;
+        }
+    }
+
+    .message.admin {
+        align-self: flex-end;
+    }
+
+    .chat-container.dark .message.admin .message-content {
+        background-color: #1e40af;
+    }
+
+    .chat-container.light .message.admin .message-content {
+        background-color: #dbeafe;
+    }
+
+    /* Мінімалістична кнопка передачі до AI */
+    .transfer-ai-button {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        background: #f3f4f6;
+        color: #374151;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        white-space: nowrap;
+    }
+
+    .transfer-ai-button:hover:not(:disabled):not(.inactive) {
+        background: #e5e7eb;
+        border-color: #9ca3af;
+    }
+
+    .transfer-ai-button:active:not(:disabled):not(.inactive) {
+        background: #d1d5db;
+    }
+
+    .transfer-ai-button:disabled,
+    .transfer-ai-button.inactive {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+
+    .transfer-spinner {
+        width: 12px;
+        height: 12px;
+        border: 1.5px solid #d1d5db;
+        border-top: 1.5px solid #374151;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    /* Помилка передачі до AI - мінімалістична */
+    .transfer-error {
+        position: absolute;
+        bottom: 80px;
+        left: 20px;
+        right: 20px;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 4px;
+        padding: 8px 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        z-index: 1000;
+    }
+
+    .transfer-error p {
+        margin: 0;
+        color: #dc2626;
+        font-size: 13px;
+    }
+
+    .dismiss-error {
+        background: none;
+        border: none;
+        color: #dc2626;
+        cursor: pointer;
+        font-size: 16px;
+        padding: 0;
+        margin-left: 8px;
+    }
+
+    /* Темна тема */
+    .dark .transfer-ai-button {
+        background: #374151;
+        color: #f9fafb;
+        border-color: #4b5563;
+    }
+
+    .dark .transfer-ai-button:hover:not(:disabled):not(.inactive) {
+        background: #4b5563;
+        border-color: #6b7280;
+    }
+
+    .dark .transfer-ai-button:active:not(:disabled):not(.inactive) {
+        background: #6b7280;
+    }
+
+    .dark .transfer-spinner {
+        border-color: #6b7280;
+        border-top-color: #f9fafb;
+    }
+
+    .dark .transfer-error {
+        background: #1f2937;
+        border-color: #374151;
+    }
+
+    .dark .transfer-error p {
+        color: #f87171;
+    }
+
+    .dark .dismiss-error {
+        color: #f87171;
+    }
+
+    /* Адаптивність */
+    @media (max-width: 768px) {
+        .transfer-ai-button span {
+            display: none;
+        }
+
+        .transfer-ai-button {
+            padding: 6px;
+            min-width: 28px;
+            justify-content: center;
+        }
+    }
+    /* Мінімалістична кнопка керування Alara */
+    .alara-toggle-button {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        white-space: nowrap;
+    }
+
+    .alara-toggle-button.enabled {
+        background: #f0fdf4;
+        color: #166534;
+        border-color: #bbf7d0;
+    }
+
+    .alara-toggle-button.disabled {
+        background: #fef2f2;
+        color: #dc2626;
+        border-color: #fecaca;
+    }
+
+    .alara-toggle-button.enabled:hover:not(:disabled) {
+        background: #dcfce7;
+        border-color: #86efac;
+    }
+
+    .alara-toggle-button.disabled:hover:not(:disabled) {
+        background: #fee2e2;
+        border-color: #fca5a5;
+    }
+
+    .alara-toggle-button.enabled:active:not(:disabled) {
+        background: #bbf7d0;
+    }
+
+    .alara-toggle-button.disabled:active:not(:disabled) {
+        background: #fecaca;
+    }
+
+    .alara-toggle-button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+
+    .alara-spinner {
+        width: 12px;
+        height: 12px;
+        border: 1.5px solid #d1d5db;
+        border-top: 1.5px solid currentColor;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    /* Помилка Alara - мінімалістична */
+    .alara-error {
+        position: absolute;
+        bottom: 120px;
+        left: 20px;
+        right: 20px;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 4px;
+        padding: 8px 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        z-index: 1000;
+    }
+
+    .alara-error p {
+        margin: 0;
+        color: #dc2626;
+        font-size: 13px;
+    }
+
+    .dismiss-alara-error {
+        background: none;
+        border: none;
+        color: #dc2626;
+        cursor: pointer;
+        font-size: 16px;
+        padding: 0;
+        margin-left: 8px;
+    }
+
+    /* Темна тема */
+    .dark .alara-toggle-button.enabled {
+        background: #064e3b;
+        color: #6ee7b7;
+        border-color: #047857;
+    }
+
+    .dark .alara-toggle-button.disabled {
+        background: #1f2937;
+        color: #f87171;
+        border-color: #374151;
+    }
+
+    .dark .alara-toggle-button.enabled:hover:not(:disabled) {
+        background: #065f46;
+        border-color: #059669;
+    }
+
+    .dark .alara-toggle-button.disabled:hover:not(:disabled) {
+        background: #374151;
+        border-color: #4b5563;
+    }
+
+    .dark .alara-toggle-button.enabled:active:not(:disabled) {
+        background: #047857;
+    }
+
+    .dark .alara-toggle-button.disabled:active:not(:disabled) {
+        background: #4b5563;
+    }
+
+    .dark .alara-spinner {
+        border-color: #6b7280;
+        border-top-color: currentColor;
+    }
+
+    .dark .alara-error {
+        background: #1f2937;
+        border-color: #374151;
+    }
+
+    .dark .alara-error p {
+        color: #f87171;
+    }
+
+    .dark .dismiss-alara-error {
+        color: #f87171;
+    }
+
+    /* Адаптивність */
+    @media (max-width: 768px) {
+        .alara-toggle-button span {
+            display: none;
+        }
+        .alara-toggle-button {
+            padding: 6px;
+            min-width: 28px;
+            justify-content: center;
         }
     }
 </style>

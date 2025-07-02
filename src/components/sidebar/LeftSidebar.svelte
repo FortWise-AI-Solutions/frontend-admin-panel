@@ -1,6 +1,7 @@
 <script>
     import { page } from "$app/stores";
     import { goto } from "$app/navigation";
+    import { themeStore } from "../../lib/store/theme";
     import imgChats from "../../lib/images/chats.png";
     import imgAnalyticss from "../../lib/images/analytics.png";
     import imgSettings from "../../lib/images/setting.png";
@@ -16,7 +17,8 @@
 
 <div class="sidebar">
     <div
-        class="block-bar chats {currentPath === '/chats' ? 'active' : ''}"
+        class="block-bar chats"
+        class:active={currentPath === '/chats'}
         on:click={() => navigateTo("/chats")}
         on:keydown={(e) => e.key === "Enter" && navigateTo("/chats")}
         role="button"
@@ -25,7 +27,8 @@
         <img src={imgChats} alt="Chats" />
     </div>
     <div
-        class="block-bar analyt {currentPath === '/analytics' ? 'active' : ''}"
+        class="block-bar analyt"
+        class:active={currentPath === '/analytics'}
         on:click={() => navigateTo("/analytics")}
         on:keydown={(e) => e.key === "Enter" && navigateTo("/analytics")}
         role="button"
@@ -33,19 +36,19 @@
     >
         <img src={imgAnalyticss} alt="Analytics" />
     </div>
-    <!--
- <div
-        class="block-bar settings {currentPath === '/widgets' ? 'active' : ''}"
+    <!-- <div
+        class="block-bar settings"
+        class:active={currentPath === '/widgets'}
         on:click={() => navigateTo("/widgets")}
         on:keydown={(e) => e.key === "Enter" && navigateTo("/widgets")}
         role="button"
         tabindex="0"
     >
         <img src={imgWidget} alt="Widget" />
-    </div>
--->
+    </div>-->
     <div
-        class="block-bar settings {currentPath === '/settings' ? 'active' : ''}"
+        class="block-bar settings"
+        class:active={currentPath === '/settings'}
         on:click={() => navigateTo("/settings")}
         on:keydown={(e) => e.key === "Enter" && navigateTo("/settings")}
         role="button"
@@ -65,6 +68,7 @@
         border-right: 1px solid var(--color-232426);
         align-items: center;
         background-color: var(--color-070709);
+        transition: all 0.3s ease;
     }
 
     .block-bar {
@@ -79,12 +83,10 @@
         justify-content: center;
         align-items: center;
         cursor: pointer;
-        transition: background-color 0.2s ease;
+        transition: all 0.3s ease;
     }
 
-    .block-bar:hover {
-        background-color: var(--color-232426);
-    }
+
 
     .block-bar.active {
         background-color: var(--color-530549);
@@ -93,43 +95,10 @@
     .block-bar img {
         width: 20px;
         height: 20px;
+        transition: all 0.3s ease;
     }
 
-    /* Світла тема */
-    [data-theme="light"] .sidebar {
-        background-color: var(--color-fff);
-        border-right-color: var(--color-e9ecef);
-    }
-
-    [data-theme="light"] .block-bar {
-        background-color: var(--color-f8f9fa);
-    }
-
-    [data-theme="light"] .block-bar:hover {
-        background-color: var(--color-e9ecef);
-    }
-
-    [data-theme="light"] .block-bar.active {
-        background-color: var(--color-3b82f6);
-    }
-
-    /* Темна тема */
-    [data-theme="dark"] .sidebar {
-        background-color: var(--color-070709);
-        border-right-color: var(--color-232426);
-    }
-
-    [data-theme="dark"] .block-bar {
-        background-color: var(--color-121213);
-    }
-
-    [data-theme="dark"] .block-bar:hover {
-        background-color: var(--color-232426);
-    }
-
-    [data-theme="dark"] .block-bar.active {
-        background-color: var(--color-530549);
-    }
+ 
 
     /* Адаптивність для великих ноутбуків */
     @media (max-width: 1440px) {
@@ -137,13 +106,11 @@
             max-width: 65px;
             padding-top: 1.8%;
         }
-
         .block-bar {
             max-width: 42px;
             max-height: 42px;
             margin-bottom: 16px;
         }
-
         .block-bar img {
             width: 18px;
             height: 18px;
@@ -156,13 +123,11 @@
             max-width: 60px;
             padding-top: 1.5%;
         }
-
         .block-bar {
             max-width: 38px;
             max-height: 38px;
             margin-bottom: 14px;
         }
-
         .block-bar img {
             width: 16px;
             height: 16px;
@@ -175,13 +140,11 @@
             max-width: 55px;
             padding-top: 1.2%;
         }
-
         .block-bar {
             max-width: 36px;
             max-height: 36px;
             margin-bottom: 12px;
         }
-
         .block-bar img {
             width: 15px;
             height: 15px;
@@ -193,13 +156,11 @@
             max-width: 50px;
             padding-top: 1%;
         }
-
         .block-bar {
             max-width: 34px;
             max-height: 34px;
             margin-bottom: 10px;
         }
-
         .block-bar img {
             width: 14px;
             height: 14px;
@@ -219,25 +180,15 @@
             justify-content: center;
             gap: 8px;
         }
-
         .block-bar {
             max-width: 40px;
             max-height: 40px;
             margin-bottom: 0;
             flex-shrink: 0;
         }
-
         .block-bar img {
             width: 16px;
             height: 16px;
-        }
-
-        [data-theme="light"] .sidebar {
-            border-bottom-color: var(--color-e9ecef);
-        }
-
-        [data-theme="dark"] .sidebar {
-            border-bottom-color: var(--color-232426);
         }
     }
 
@@ -246,25 +197,13 @@
             padding: 8px;
             gap: 6px;
         }
-
         .block-bar {
             max-width: 36px;
             max-height: 36px;
         }
-
         .block-bar img {
             width: 14px;
             height: 14px;
         }
-    }
-
-    /* Фокус для доступності */
-    .block-bar:focus {
-        outline: 2px solid var(--color-3b82f6);
-        outline-offset: 2px;
-    }
-
-    [data-theme="dark"] .block-bar:focus {
-        outline-color: var(--color-530549);
     }
 </style>

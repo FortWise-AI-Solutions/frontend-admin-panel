@@ -20,6 +20,9 @@
     interface UserWithMessages extends User {
         unreadCount?: number;
         lastMessageTime?: Date;
+        // Додаємо поля для статусів з бази даних
+        alara_status?: boolean;
+        human_required?: boolean;
     }
 
     export let selectedUserId: string | null = null;
@@ -29,8 +32,6 @@
     export let activeStatus: "Online" | "Offline" | "Human Required" | null =
         null;
     export let clientId: number | undefined = undefined;
-
-    // Додаємо пропс для передачі інформації про нові повідомлення
     export let unreadMessages: Record<string, number> = {};
     export let lastMessageTimes: Record<string, Date> = {};
 
@@ -38,13 +39,11 @@
     let isLoading = true;
     let error: string | null = null;
     let currentUserInfo: CurrentUserInfo | null = getCurrentUserInfo();
-
-    // Додаємо змінну для зберігання інтервалу
     let refreshInterval: NodeJS.Timeout | null = null;
 
-    // Статуси та їх кольори
+    // Оновлені статуси та їх кольори
     const statusConfig: Record<string, { color: string; label: string }> = {
-        "on-going": { color: "#4DE944", label: "Online" },
+        online: { color: "#4DE944", label: "Online" },
         offline: { color: "#E94447", label: "Offline" },
         "human-required": { color: "#E9D644", label: "Human Required" },
         "no-info": { color: "#6b7280", label: "No Info" },
@@ -56,12 +55,28 @@
         Instagram: ["Instagram", "instagram", "INSTAGRAM"],
     };
 
-    // Маппінг статусів фільтра до статусів користувачів
+    // Оновлений маппінг статусів фільтра до статусів користувачів
     const statusMapping: Record<string, string> = {
-        Online: "on-going",
+        Online: "online",
         Offline: "offline",
         "Human Required": "human-required",
     };
+
+    // Функція для визначення статусу користувача на основі полів з бази даних
+    function getUserStatus(user: UserWithMessages): string {
+        // Якщо human_required = true, то статус завжди "human-required"
+        if (user.human_required === true) {
+            return "human-required";
+        }
+        // Якщо human_required не true, то дивимось на alara_status
+        if (user.alara_status === true) {
+            return "online";
+        } else if (user.alara_status === false) {
+            return "offline";
+        }
+        // Якщо немає інформації про статуси
+        return "no-info";
+    }
 
     // Генерація рандомного градієнта для аватара
     function generateGradient(): string {
@@ -94,7 +109,6 @@
         return `linear-gradient(${angle}deg, ${color1}, ${color2})`;
     }
 
-    // Кешування градієнтів для кожного користувача
     const gradientCache = new Map<string, string>();
     function getUserGradient(userId: string): string {
         if (!gradientCache.has(userId)) {
@@ -103,21 +117,17 @@
         return gradientCache.get(userId)!;
     }
 
-    // Функція для запуску інтервалу оновлення
     function startRefreshInterval() {
-        // Очищуємо попередній інтервал, якщо він існує
         if (refreshInterval) {
             clearInterval(refreshInterval);
         }
-
-        // Створюємо новий інтервал на 2 секунди
+        // Змінено інтервал на 1 секунду для реального часу
         refreshInterval = setInterval(() => {
             console.log("Auto-refreshing users...");
             loadUsers();
-        }, 2000);
+        }, 1000); // 1 секунда замість 2 секунд
     }
 
-    // Функція для зупинки інтервалу
     function stopRefreshInterval() {
         if (refreshInterval) {
             clearInterval(refreshInterval);
@@ -125,20 +135,17 @@
         }
     }
 
-    // Завантаження користувачів при монтуванні компонента
     onMount(async () => {
         await loadUsers();
         startRefreshInterval();
     });
 
-    // Очищення інтервалу при знищенні компонента
     onDestroy(() => {
         stopRefreshInterval();
     });
 
     async function loadUsers() {
         try {
-            // Не показуємо лоадер при автоматичному оновленні
             if (!refreshInterval) {
                 isLoading = true;
             }
@@ -152,14 +159,28 @@
 
             const loadedUsers = await getFilteredUsers(clientId);
 
-            // Додаємо інформацію про непрочитані повідомлення
-            users = loadedUsers.map((user) => ({
-                ...user,
-                unreadCount: unreadMessages[user.id] || 0,
-                lastMessageTime: lastMessageTimes[user.id],
-            }));
+            // Обробляємо користувачів та встановлюємо правильні статуси
+            users = loadedUsers.map((user) => {
+                const userWithStatus = {
+                    ...user,
+                    unreadCount: unreadMessages[user.id] || 0,
+                    lastMessageTime: lastMessageTimes[user.id],
+                };
+                // Встановлюємо статус на основі полів з бази даних
+                const calculatedStatus = getUserStatus(userWithStatus);
+                userWithStatus.status = calculatedStatus;
+                return userWithStatus;
+            });
 
-            console.log(`Loaded ${users.length} users`);
+            console.log(
+                `Loaded ${users.length} users with statuses:`,
+                users.map((u) => ({
+                    id: u.id,
+                    status: u.status,
+                    alara_status: u.alara_status,
+                    human_required: u.human_required,
+                })),
+            );
         } catch (err) {
             console.error("Error loading users:", err);
             error = err instanceof Error ? err.message : "Failed to load users";
@@ -172,7 +193,6 @@
     function handleUserSelect(user: UserWithMessages): void {
         selectedUserId = user.id;
         onUserSelect(user);
-
         if (user.unreadCount && user.unreadCount > 0) {
             unreadMessages[user.id] = 0;
             updateUserUnreadCount(user.id, 0);
@@ -185,35 +205,77 @@
         );
     }
 
+    // Оновлена функція сортування з пріоритетом для Human Required
     function sortUsers(users: UserWithMessages[]): UserWithMessages[] {
         return [...users].sort((a, b) => {
             const aUnread = a.unreadCount || 0;
             const bUnread = b.unreadCount || 0;
+            const aStatus = getUserStatus(a);
+            const bStatus = getUserStatus(b);
 
-            // Спочатку сортуємо за кількістю непрочитаних повідомлень
+            // НАЙВИЩИЙ ПРІОРИТЕТ: Users з human_required статусом завжди першими
+            const aHumanRequired = aStatus === "human-required";
+            const bHumanRequired = bStatus === "human-required";
+
+            if (aHumanRequired && !bHumanRequired) return -1;
+            if (!aHumanRequired && bHumanRequired) return 1;
+
+            // Якщо обидва мають human_required статус, сортуємо їх між собою
+            if (aHumanRequired && bHumanRequired) {
+                // Спочатку по кількості непрочитаних повідомлень
+                if (aUnread > 0 && bUnread === 0) return -1;
+                if (bUnread > 0 && aUnread === 0) return 1;
+                if (aUnread > 0 && bUnread > 0) {
+                    return bUnread - aUnread;
+                }
+
+                // Потім по часу останнього повідомлення
+                if (a.lastMessageTime && b.lastMessageTime) {
+                    return (
+                        b.lastMessageTime.getTime() -
+                        a.lastMessageTime.getTime()
+                    );
+                }
+                if (a.lastMessageTime && !b.lastMessageTime) return -1;
+                if (!a.lastMessageTime && b.lastMessageTime) return 1;
+
+                // Потім по імені
+                const aName = a.nickname || a.name || a.username || "";
+                const bName = b.nickname || b.name || b.username || "";
+                return aName.localeCompare(bName);
+            }
+
+            // Для користувачів БЕЗ human_required статусу:
+            // Priority 2: Users with unread messages
+            if (aUnread > 0 && bUnread === 0) return -1;
+            if (bUnread > 0 && aUnread === 0) return 1;
+
+            // Priority 3: Among users with unread messages, sort by unread count (descending)
             if (aUnread > 0 && bUnread > 0) {
                 return bUnread - aUnread;
             }
 
-            // Користувачі з непрочитаними повідомленнями йдуть першими
-            if (aUnread > 0 && bUnread === 0) return -1;
-            if (bUnread > 0 && aUnread === 0) return 1;
-
-            // Потім сортуємо за часом останнього повідомлення
+            // Priority 4: Sort by last message time (most recent first)
             if (a.lastMessageTime && b.lastMessageTime) {
                 return (
                     b.lastMessageTime.getTime() - a.lastMessageTime.getTime()
                 );
             }
 
-            return 0;
+            // Priority 5: Users with last message time come before those without
+            if (a.lastMessageTime && !b.lastMessageTime) return -1;
+            if (!a.lastMessageTime && b.lastMessageTime) return 1;
+
+            // Priority 6: Fallback to alphabetical sorting by name
+            const aName = a.nickname || a.name || a.username || "";
+            const bName = b.nickname || b.name || b.username || "";
+            return aName.localeCompare(bName);
         });
     }
 
-    // Додати в <script> секцію UserSelect.svelte
     export let searchQuery: string = "";
 
-    // Оновити фільтрацію користувачів
+    // Оновлена фільтрація користувачів з правильними статусами
     $: filteredAndSortedUsers = sortUsers(
         users.filter((user) => {
             let platformMatch = true;
@@ -229,7 +291,8 @@
 
             if (activeStatus) {
                 const mappedStatus = statusMapping[activeStatus];
-                statusMatch = user.status === mappedStatus;
+                const userStatus = getUserStatus(user);
+                statusMatch = userStatus === mappedStatus;
             }
 
             if (searchQuery.trim()) {
@@ -244,7 +307,6 @@
                     .filter(Boolean)
                     .join(" ")
                     .toLowerCase();
-
                 searchMatch = searchableText.includes(query);
             }
 
@@ -280,7 +342,6 @@
         updateUserUnreadCount(userId, count);
     }
 
-    // Додаємо функції для керування автооновленням
     export function pauseAutoRefresh() {
         stopRefreshInterval();
     }
@@ -296,17 +357,26 @@
             totalUsers: users.length,
             filteredUsers: filteredAndSortedUsers.length,
             userPlatforms: [...new Set(users.map((u) => u.platform))],
-            userStatuses: [...new Set(users.map((u) => u.status))],
+            userStatuses: [...new Set(users.map((u) => getUserStatus(u)))],
+            humanRequiredUsers: filteredAndSortedUsers.filter(
+                (u) => getUserStatus(u) === "human-required",
+            ).length,
             unreadCounts: users.map((u) => ({
                 id: u.id,
                 unread: u.unreadCount,
+                status: getUserStatus(u),
+                alara_status: u.alara_status,
+                human_required: u.human_required,
             })),
         });
     }
 </script>
 
-<!-- Решта коду залишається без змін -->
-<div class="block-users">
+<div
+    class="block-users"
+    class:dark={$themeStore === "dark"}
+    class:light={$themeStore === "light"}
+>
     {#if isLoading}
         <div class="loading">
             <p>Loading users...</p>
@@ -335,10 +405,14 @@
         </div>
     {:else}
         {#each filteredAndSortedUsers as user (user.id)}
+            {@const userStatus = getUserStatus(user)}
             <div
                 class="user"
                 class:selected={selectedUserId === user.id}
                 class:has-unread={user.unreadCount && user.unreadCount > 0}
+                class:human-required={userStatus === "human-required"}
+                class:dark={$themeStore === "dark"}
+                class:light={$themeStore === "light"}
                 on:click={() => handleUserSelect(user)}
                 role="button"
                 tabindex="0"
@@ -354,6 +428,14 @@
                             {user.unreadCount > 99 ? "99+" : user.unreadCount}
                         </div>
                     {/if}
+                    {#if userStatus === "human-required"}
+                        <div
+                            class="human-required-indicator"
+                            title="Human Required"
+                        >
+                            
+                        </div>
+                    {/if}
                 </div>
                 <div class="text">
                     <h3>
@@ -363,10 +445,10 @@
                             "no info"}
                     </h3>
                     <div class="status">
-                        <p>{statusConfig[user.status]?.label || "no info"}</p>
+                        <p>{statusConfig[userStatus]?.label || "no info"}</p>
                         <div
                             class="status-indicator"
-                            style="background-color: {statusConfig[user.status]
+                            style="background-color: {statusConfig[userStatus]
                                 ?.color || '#6b7280'}"
                         ></div>
                     </div>
@@ -384,6 +466,7 @@
         gap: 6px;
         max-height: 800px;
         overflow-y: auto;
+        transition: background-color 0.3s ease;
     }
 
     .user {
@@ -396,6 +479,7 @@
         transition: all 0.2s ease;
         border: 2px solid transparent;
         position: relative;
+        background-color: transparent;
     }
 
     .user:hover {
@@ -404,15 +488,15 @@
 
     .user.selected {
         background-color: var(--color-530549);
-        color: #fff;
+        color: var(--color-fff);
     }
 
     .user.selected h3 {
-        color: #fff;
+        color: var(--color-ffffff);
     }
 
     .user.selected .status p {
-        color: #fff;
+        color: var(--color-ffffff);
     }
 
     .user.has-unread {
@@ -451,6 +535,7 @@
         padding: 0 4px;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         z-index: 1;
+        animation: pulse 2s infinite;
     }
 
     .text {
@@ -466,6 +551,7 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        transition: color 0.3s ease;
     }
 
     .user.has-unread .text h3 {
@@ -486,6 +572,7 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        transition: color 0.3s ease;
     }
 
     .status-indicator {
@@ -508,6 +595,7 @@
         margin: 0 0 8px 0;
         color: var(--color-9b9ca3);
         font-size: 16px;
+        transition: color 0.3s ease;
     }
 
     .no-users small {
@@ -516,17 +604,19 @@
         display: block;
         margin-top: 8px;
         line-height: 1.4;
+        transition: color 0.3s ease;
     }
 
     .retry-btn {
         background-color: var(--color-530549);
-        color: #fff;
+        color: var(--color-fff);
         border: none;
         padding: 8px 16px;
         border-radius: 4px;
         cursor: pointer;
         font-size: 14px;
         margin-top: 8px;
+        transition: all 0.3s ease;
     }
 
     .retry-btn:hover {
@@ -565,11 +655,8 @@
         }
     }
 
-    .unread-badge {
-        animation: pulse 2s infinite;
-    }
-
     .user.has-unread:hover .unread-badge {
         animation: none;
     }
+    /* Додаткові стилі для користувачів у світлій темі */
 </style>
