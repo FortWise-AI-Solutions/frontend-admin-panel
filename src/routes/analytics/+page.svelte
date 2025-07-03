@@ -1,7 +1,11 @@
 <script>
     import { onMount, onDestroy } from "svelte";
     import { supabase } from "$lib/supabaseClient";
-    
+    import {
+        getCurrentUser,
+        getClientIdForFiltering,
+    } from "../client-login/userUtils";
+
     // Define proper TypeScript interface using JSDoc
     /**
      * @typedef {Object} ActivityItem
@@ -21,6 +25,17 @@
      * @property {ActivityItem[]} recentActivity
      */
 
+    /**
+     * @typedef {Object} AuthUser
+     * @property {number} id
+     * @property {string} name
+     * @property {string} [email]
+     * @property {'alara_admin'|'user_admin'|'client_admin'} role
+     * @property {'panel_admins'|'clients'|'client_users'} table
+     * @property {number} [client_id]
+     * @property {string} [created_at]
+     */
+
     // Properly typed analytics variable
     /** @type {AnalyticsData} */
     let analytics = {
@@ -33,17 +48,39 @@
 
     let isConnected = true;
     let lastUpdate = "--:--";
-        
+
     /** @type {NodeJS.Timeout | null} */
     let updateInterval = null;
-        
+
     /** @type {any} */
     let realtimeSubscription = null;
 
-    // Get client_id from session or context
-    let clientId = 1; // Replace with actual client_id
+    // Get client_id from current user - properly typed
+    /** @type {number | null} */
+    let clientId = null;
+
+    /** @type {AuthUser | null} */
+    let currentUser = null;
 
     onMount(async () => {
+        // Get current user and determine client_id
+        currentUser = getCurrentUser();
+        if (!currentUser) {
+            console.error("No authenticated user found");
+            isConnected = false;
+            return;
+        }
+
+        // Determine client_id based on user role
+        if (currentUser.role === "alara_admin") {
+            // For super admin, we might want to show aggregated data or let them select a client
+            // For now, let's show all data (we'll modify queries accordingly)
+            clientId = null;
+        } else {
+            clientId = getClientIdForFiltering(currentUser);
+        }
+
+        console.log("Analytics initialized for client_id:", clientId);
         await loadAnalytics();
         startRealTimeUpdates();
         setupRealtimeSubscription();
@@ -80,11 +117,13 @@
         }
     }
 
+    /**
+     * @returns {Promise<number>}
+     */
     async function getAverageResponseTime() {
-        const { data, error } = await supabase
+        let query = supabase
             .from("messages")
             .select("time, response_time")
-            .eq("client_id", clientId)
             .not("response_time", "is", null)
             .not("time", "is", null)
             .gte(
@@ -92,30 +131,45 @@
                 new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
             );
 
+        // Apply client filter if not super admin
+        if (clientId !== null) {
+            query = query.eq("client_id", clientId);
+        }
+
+        const { data, error } = await query;
         if (error) throw error;
         if (!data || data.length === 0) return 0;
 
         const totalMinutes = data.reduce((sum, msg) => {
             const responseTime = new Date(msg.response_time);
             const messageTime = new Date(msg.time);
-            const diffMinutes = (responseTime.getTime() - messageTime.getTime()) / (1000 * 60);
+            const diffMinutes =
+                (responseTime.getTime() - messageTime.getTime()) / (1000 * 60);
             return sum + diffMinutes;
         }, 0);
 
         return Math.round((totalMinutes / data.length) * 10) / 10;
     }
 
+    /**
+     * @returns {Promise<number>}
+     */
     async function getCompletionRate() {
-        const { data: totalChats, error: totalError } = await supabase
+        // Get total unique chats
+        let totalQuery = supabase
             .from("messages")
             .select("chat_id")
-            .eq("client_id", clientId)
             .not("chat_id", "is", null)
             .gte(
                 "time",
                 new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
             );
 
+        if (clientId !== null) {
+            totalQuery = totalQuery.eq("client_id", clientId);
+        }
+
+        const { data: totalChats, error: totalError } = await totalQuery;
         if (totalError) throw totalError;
 
         const uniqueChats = [
@@ -124,10 +178,10 @@
 
         if (uniqueChats.length === 0) return 0;
 
-        const { data: completedChats, error: completedError } = await supabase
+        // Get completed chats (chats with responses)
+        let completedQuery = supabase
             .from("messages")
             .select("chat_id")
-            .eq("client_id", clientId)
             .not("response", "is", null)
             .not("chat_id", "is", null)
             .gte(
@@ -135,6 +189,12 @@
                 new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
             );
 
+        if (clientId !== null) {
+            completedQuery = completedQuery.eq("client_id", clientId);
+        }
+
+        const { data: completedChats, error: completedError } =
+            await completedQuery;
         if (completedError) throw completedError;
 
         const uniqueCompletedChats = [
@@ -146,33 +206,49 @@
         );
     }
 
+    /**
+     * @returns {Promise<number>}
+     */
     async function getTotalChats() {
-        const { data, error } = await supabase
+        let query = supabase
             .from("messages")
             .select("chat_id")
-            .eq("client_id", clientId)
             .not("chat_id", "is", null)
             .gte(
                 "time",
                 new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
             );
 
+        if (clientId !== null) {
+            query = query.eq("client_id", clientId);
+        }
+
+        const { data, error } = await query;
         if (error) throw error;
+
         return [...new Set(data?.map((m) => m.chat_id) || [])].length;
     }
 
+    /**
+     * @returns {Promise<number>}
+     */
     async function getUniqueUsers() {
-        const { data, error } = await supabase
+        let query = supabase
             .from("messages")
             .select("end_user_id")
-            .eq("client_id", clientId)
             .not("end_user_id", "is", null)
             .gte(
                 "time",
                 new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
             );
 
+        if (clientId !== null) {
+            query = query.eq("client_id", clientId);
+        }
+
+        const { data, error } = await query;
         if (error) throw error;
+
         return [...new Set(data?.map((m) => m.end_user_id) || [])].length;
     }
 
@@ -180,13 +256,17 @@
      * @returns {Promise<ActivityItem[]>}
      */
     async function getRecentActivity() {
-        const { data, error } = await supabase
+        let query = supabase
             .from("messages")
             .select("*")
-            .eq("client_id", clientId)
             .order("time", { ascending: false })
             .limit(10);
 
+        if (clientId !== null) {
+            query = query.eq("client_id", clientId);
+        }
+
+        const { data, error } = await query;
         if (error) throw error;
 
         return (
@@ -201,25 +281,38 @@
     }
 
     function setupRealtimeSubscription() {
-        realtimeSubscription = supabase
-            .channel("messages_changes")
-            .on(
-                "postgres_changes",
-                {
-                    event: "*",
-                    schema: "public",
-                    table: "messages",
+        let channel = supabase.channel("messages_changes");
+
+        // Setup realtime subscription
+        let subscription = channel.on(
+            "postgres_changes",
+            {
+                event: "*",
+                schema: "public",
+                table: "messages",
+                // If we have a specific client, filter by it
+                ...(clientId !== null && {
                     filter: `client_id=eq.${clientId}`,
-                },
-                (/** @type {any} */ payload) => {
-                    console.log("Real-time update:", payload);
-                    handleRealtimeUpdate(payload);
-                },
-            )
-            .subscribe();
+                }),
+            },
+            (/** @type {any} */ payload) => {
+                console.log("Real-time update:", payload);
+                handleRealtimeUpdate(payload);
+            },
+        );
+
+        realtimeSubscription = subscription.subscribe();
     }
 
-    function handleRealtimeUpdate(/** @type {any} */ payload) {
+    /**
+     * @param {any} payload
+     */
+    function handleRealtimeUpdate(payload) {
+        // Only process if it's for our client (additional check)
+        if (clientId !== null && payload.new?.client_id !== clientId) {
+            return;
+        }
+
         // Add new activity
         if (payload.eventType === "INSERT") {
             const newActivity = {
@@ -260,7 +353,11 @@
         });
     }
 
-    function formatTimeAgo(/** @type {Date} */ date) {
+    /**
+     * @param {Date} date
+     * @returns {string}
+     */
+    function formatTimeAgo(date) {
         const now = new Date();
         const diff = now.getTime() - date.getTime();
         if (diff < 60000) return "Just now";
@@ -269,11 +366,19 @@
         return date.toLocaleDateString();
     }
 
-    function getActivityIcon(/** @type {string} */ type) {
+    /**
+     * @param {string} type
+     * @returns {string}
+     */
+    function getActivityIcon(type) {
         return type === "response" ? "✅" : "💬";
     }
 
-    function getActivityClass(/** @type {string} */ type) {
+    /**
+     * @param {string} type
+     * @returns {string}
+     */
+    function getActivityClass(type) {
         return type === "response" ? "response" : "message";
     }
 </script>
@@ -286,10 +391,19 @@
                 <div class="status-dot" class:disconnected={!isConnected}></div>
                 <span>{isConnected ? "Live" : "Offline"}</span>
             </div>
-            <div class="last-update">Updated: {lastUpdate}</div>
         </div>
         <div class="chat-list">
-            <p>Real-time analytics about your client interactions</p>
+            <p>Updated at {lastUpdate}</p>
+            {#if currentUser}
+                <small>
+                    Viewing data for: {currentUser.name}
+                    {#if currentUser.role === "alara_admin"}
+                        (All Clients)
+                    {:else}
+                        (Client ID: {clientId})
+                    {/if}
+                </small>
+            {/if}
         </div>
     </div>
 
@@ -375,7 +489,9 @@
                     <span class="stat-label">Last Hour:</span>
                     <span class="stat-value">
                         {analytics.recentActivity.filter(
-                            (/** @type {ActivityItem} */ a) => new Date().getTime() - a.time.getTime() < 3600000,
+                            (/** @type {ActivityItem} */ a) =>
+                                new Date().getTime() - a.time.getTime() <
+                                3600000,
                         ).length}
                     </span>
                 </div>
@@ -383,7 +499,9 @@
                     <span class="stat-label">Last 5 Minutes:</span>
                     <span class="stat-value">
                         {analytics.recentActivity.filter(
-                            (/** @type {ActivityItem} */ a) => new Date().getTime() - a.time.getTime() < 300000,
+                            (/** @type {ActivityItem} */ a) =>
+                                new Date().getTime() - a.time.getTime() <
+                                300000,
                         ).length}
                     </span>
                 </div>
@@ -404,8 +522,15 @@
                         </div>
                         <div class="activity-content">
                             <div class="activity-title">{activity.title}</div>
-                            <div class="activity-time">
-                                {formatTimeAgo(activity.time)}
+                            <div class="activity-meta">
+                                <span class="activity-time">
+                                    {formatTimeAgo(activity.time)}
+                                </span>
+                                {#if activity.chat_id}
+                                    <span class="activity-chat">
+                                        Chat: {activity.chat_id.slice(0, 8)}...
+                                    </span>
+                                {/if}
                             </div>
                         </div>
                     </div>
@@ -413,13 +538,16 @@
                 {#if analytics.recentActivity.length === 0}
                     <div class="no-activity">
                         <p>No recent activity</p>
+                        <small
+                            >Messages will appear here when users interact with
+                            your bot</small
+                        >
                     </div>
                 {/if}
             </div>
         </div>
     </div>
 </div>
-
 
 <style>
     /* Ваші існуючі стилі + додаткові */
@@ -482,15 +610,8 @@
         transition: all 0.3s ease;
     }
 
-    .block.updating .counter {
-        color: #22c55e;
-        text-shadow: 0 0 20px rgba(34, 197, 94, 0.5);
-        transform: scale(1.05);
-    }
-
-    .block.updating .pulse-indicator {
-        background: #22c55e;
-        animation: pulseGlow 1s ease-out;
+    .chat-list p {
+        color: var(--color-9b9ca3);
     }
 
     @keyframes pulseGlow {

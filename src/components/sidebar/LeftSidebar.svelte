@@ -3,9 +3,13 @@
     import { goto } from "$app/navigation";
     import { themeStore } from "../../lib/store/theme";
     import imgChats from "../../lib/images/chats.png";
-    import imgAnalyticss from "../../lib/images/analytics.png";
-    import imgSettings from "../../lib/images/setting.png";
+    import imgAnalytics from "../../lib/images/analytics.png";
+    import imgSettings from "../../lib/images/settings.png";
     import imgWidget from "../../lib/images/widget.png";
+
+    import imgChats2 from "../../lib/images/envelope (2).png";
+    import imgAnalytics2 from "../../lib/images/analytics.png";
+    import logOut from "../../lib/images/logout.png";
 
     $: currentPath = $page.url.pathname;
 
@@ -13,28 +17,40 @@
     function navigateTo(path) {
         goto(path);
     }
+
+    function handleLogout() {
+        // Очищуємо localStorage/sessionStorage якщо потрібно
+        localStorage.clear();
+        sessionStorage.clear();
+
+        // Перенаправляємо на головну сторінку та повністю перезавантажуємо
+        window.location.href = "/";
+
+        // Альтернативно можна використати:
+        // window.location.replace('/');
+    }
 </script>
 
 <div class="sidebar">
     <div
         class="block-bar chats"
-        class:active={currentPath === '/chats'}
+        class:active={currentPath === "/chats"}
         on:click={() => navigateTo("/chats")}
         on:keydown={(e) => e.key === "Enter" && navigateTo("/chats")}
         role="button"
         tabindex="0"
     >
-        <img src={imgChats} alt="Chats" />
+        <img src={imgChats2} alt="Chats" />
     </div>
     <div
         class="block-bar analyt"
-        class:active={currentPath === '/analytics'}
+        class:active={currentPath === "/analytics"}
         on:click={() => navigateTo("/analytics")}
         on:keydown={(e) => e.key === "Enter" && navigateTo("/analytics")}
         role="button"
         tabindex="0"
     >
-        <img src={imgAnalyticss} alt="Analytics" />
+        <img src={imgAnalytics2} alt="Analytics" />
     </div>
     <!-- <div
         class="block-bar settings"
@@ -48,13 +64,24 @@
     </div>-->
     <div
         class="block-bar settings"
-        class:active={currentPath === '/settings'}
+        class:active={currentPath === "/settings"}
         on:click={() => navigateTo("/settings")}
         on:keydown={(e) => e.key === "Enter" && navigateTo("/settings")}
         role="button"
         tabindex="0"
     >
         <img src={imgSettings} alt="Settings" />
+    </div>
+
+    <div
+        class="block-bar logout"
+        on:click={handleLogout}
+        on:keydown={(e) => e.key === "Enter" && handleLogout()}
+        role="button"
+        tabindex="0"
+        title="Log Out"
+    >
+         <img src={logOut} alt="logout" />
     </div>
 </div>
 
@@ -86,8 +113,6 @@
         transition: all 0.3s ease;
     }
 
-
-
     .block-bar.active {
         background-color: var(--color-530549);
     }
@@ -97,8 +122,6 @@
         height: 20px;
         transition: all 0.3s ease;
     }
-
- 
 
     /* Адаптивність для великих ноутбуків */
     @media (max-width: 1440px) {

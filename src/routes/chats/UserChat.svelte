@@ -7,6 +7,13 @@
     import { supabase } from "../../lib/supabaseClient";
     import { onMount, onDestroy } from "svelte";
     import { PUBLIC_WEB_SERVER } from "$env/static/public";
+    import {
+        getCachedLocalTime,
+        clearUserTimestampCache,
+        getTimestampCacheStats,
+        debugTimezone,
+        getUserTimezone,
+    } from "./timezone/timezone";
 
     export let selectedUser: User;
     export let onBackToList: () => void = () => {};
@@ -449,7 +456,7 @@
         }
     }
 
-    // Конвертація повідомлень з бази даних у формат для відображення
+    // Updated function using proper timezone conversion
     function convertDatabaseMessagesToDisplayMessages(
         dbMessages: DatabaseMessage[],
         isUpdate: boolean = false,
@@ -457,18 +464,37 @@
         const convertedMessages: Message[] = [];
         const existingMessageIds = new Set(messages.map((m) => m.id));
 
-        dbMessages.forEach((dbMsg) => {
-            const dbTimestamp = dbMsg.time ? new Date(dbMsg.time) : new Date();
+        console.log(
+            `🕐 Converting ${dbMessages.length} messages for timezone: ${getUserTimezone()}`,
+        );
 
-            // Додаємо повідомлення користувача
+        dbMessages.forEach((dbMsg) => {
+            // Get timestamp from database (should be in UTC)
+            const dbTimestamp = dbMsg.time
+                ? dbMsg.time
+                : new Date().toISOString();
+
+            // Debug first message
+            if (
+                process.env.NODE_ENV === "development" &&
+                dbMessages.indexOf(dbMsg) === 0
+            ) {
+                debugTimezone(dbTimestamp);
+            }
+
+            // Add user message
             if (dbMsg.content) {
-                const userMessageId = `${dbMsg.id}-user`;
+                const userMessageId = `${selectedUser.id}-${dbMsg.id}-user`;
                 const isNewMessage =
                     isUpdate && !existingMessageIds.has(userMessageId);
-                const { timeString, dateString } = calculateLocalMessageTime(
-                    dbTimestamp,
-                    isNewMessage,
-                );
+
+                // Use global cache for timezone-aware timestamp conversion
+                const { timeString, dateString, localTimestamp } =
+                    getCachedLocalTime(
+                        dbTimestamp,
+                        userMessageId,
+                        isNewMessage,
+                    );
 
                 convertedMessages.push({
                     id: userMessageId,
@@ -477,21 +503,25 @@
                     timestamp: timeString,
                     date: dateString,
                     originalId: dbMsg.id,
-                    dbTimestamp: dbTimestamp,
+                    dbTimestamp: localTimestamp,
                     isNew: isNewMessage,
                 });
             }
 
-            // Додаємо відповідь (бот або адмін)
+            // Add response (bot or admin)
             if (dbMsg.response) {
                 const isFromAlara = dbMsg.is_written_by_alara !== false;
-                const responseMessageId = `${dbMsg.id}-${isFromAlara ? "bot" : "admin"}`;
+                const responseMessageId = `${selectedUser.id}-${dbMsg.id}-${isFromAlara ? "bot" : "admin"}`;
                 const isNewMessage =
                     isUpdate && !existingMessageIds.has(responseMessageId);
-                const { timeString, dateString } = calculateLocalMessageTime(
-                    dbTimestamp,
-                    isNewMessage,
-                );
+
+                // Use global cache for timezone-aware timestamp conversion
+                const { timeString, dateString, localTimestamp } =
+                    getCachedLocalTime(
+                        dbTimestamp,
+                        responseMessageId,
+                        isNewMessage,
+                    );
 
                 convertedMessages.push({
                     id: responseMessageId,
@@ -501,17 +531,31 @@
                     date: dateString,
                     originalId: dbMsg.id,
                     isWrittenByAlara: isFromAlara,
-                    dbTimestamp: dbTimestamp,
+                    dbTimestamp: localTimestamp,
                     isNew: isNewMessage,
                 });
             }
         });
 
-        // Сортуємо за оригінальним часом з БД для правильного порядку
-        return convertedMessages.sort(
+        // Sort by local timestamp
+        const sorted = convertedMessages.sort(
             (a, b) => a.dbTimestamp.getTime() - b.dbTimestamp.getTime(),
         );
+
+        console.log(`🕐 Converted and sorted ${sorted.length} messages`);
+        return sorted;
     }
+
+    // Show timezone info on component mount (for debugging)
+    onMount(() => {
+        if (process.env.NODE_ENV === "development") {
+            console.log("🕐 UserChat mounted with timezone:", {
+                timezone: getUserTimezone(),
+                offset: -new Date().getTimezoneOffset(),
+                sample: new Date().toLocaleString(),
+            });
+        }
+    });
 
     // Функція для перевірки чи користувач внизу чату
     function checkIfAtBottom(): void {
@@ -1259,8 +1303,6 @@
 
 <!-- Модальне вікно підтвердження передачі до AI -->
 {#if showTransferModal}
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div
         class="modal-overlay"
         on:click={cancelTransferToAI}
@@ -1268,8 +1310,6 @@
         role="dialog"
         aria-modal="true"
     >
-        <!-- svelte-ignore a11y-click-events-have-key-events -->
-        <!-- svelte-ignore a11y-no-static-element-interactions -->
         <div
             class="modal-content"
             class:dark={$themeStore === "dark"}
