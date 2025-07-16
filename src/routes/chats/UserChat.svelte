@@ -57,6 +57,8 @@
     let showAlaraToggleModal: boolean = false;
     let pendingAlaraAction: "enable" | "disable" | null = null;
 
+    let statusUpdateInterval: NodeJS.Timeout | null = null;
+
     // Додайте цю функцію для запуску ререндерингу
     function startRerenderInterval(): void {
         if (rerenderInterval) {
@@ -118,14 +120,13 @@
     let transferError: string | null = null;
     $: isHumanRequired = userHumanRequired;
 
-    // Функція для отримання актуального статусу користувача з БД
     async function fetchUserStatus(): Promise<void> {
         if (!selectedUser?.id) return;
 
         try {
             const { data, error } = await supabase
                 .from("end_users")
-                .select("human_required")
+                .select("human_required, alara_status") // Додаємо alara_status
                 .eq("id", parseInt(selectedUser.id))
                 .single();
 
@@ -135,14 +136,64 @@
             }
 
             if (data) {
+                const oldHumanRequired = userHumanRequired;
+                const oldStatus = selectedUser.status;
+
                 userHumanRequired = data.human_required || false;
-                console.log(
-                    `User ${selectedUser.id} human_required status:`,
-                    userHumanRequired,
-                );
+
+                // Визначаємо новий статус на основі полів з БД (як у UserList)
+                let newStatus = "no-info";
+                if (data.human_required === true) {
+                    newStatus = "human-required";
+                } else if (data.alara_status === true) {
+                    newStatus = "online";
+                } else if (data.alara_status === false) {
+                    newStatus = "offline";
+                }
+
+                // Оновлюємо selectedUser якщо статус змінився
+                if (newStatus !== oldStatus) {
+                    selectedUser = {
+                        ...selectedUser,
+                        status: newStatus,
+                        alara_status: data.alara_status,
+                        human_required: data.human_required,
+                    };
+                    console.log(
+                        `User ${selectedUser.id} status updated from ${oldStatus} to ${newStatus}`,
+                    );
+                }
+
+                // Оновлюємо currentAlaraStatus для кнопки
+                currentAlaraStatus = data.alara_status ?? true;
+
+                console.log(`User ${selectedUser.id} status check:`, {
+                    human_required: userHumanRequired,
+                    alara_status: data.alara_status,
+                    calculated_status: newStatus,
+                    status_changed: oldStatus !== newStatus,
+                });
             }
         } catch (err) {
             console.error("Error fetching user status:", err);
+        }
+    }
+
+    // Функція для запуску інтервалу оновлення статусу
+    function startStatusUpdateInterval(): void {
+        if (statusUpdateInterval) {
+            clearInterval(statusUpdateInterval);
+        }
+        statusUpdateInterval = setInterval(() => {
+            fetchUserStatus();
+        }, 1000); // Кожну секунду, як у UserList
+    }
+
+    // Функція для зупинки інтервалу оновлення статусу
+    function stopStatusUpdateInterval(): void {
+        if (statusUpdateInterval) {
+            clearInterval(statusUpdateInterval);
+            statusUpdateInterval = null;
         }
     }
 
@@ -677,7 +728,7 @@
         }
     }
 
-    // включення перевірки статусу:
+    // Оновлена функція startAutoUpdate
     function startAutoUpdate(): void {
         if (updateInterval) {
             clearInterval(updateInterval);
@@ -685,17 +736,21 @@
         updateInterval = setInterval(() => {
             if (selectedUser?.id) {
                 loadMessages(true);
-                fetchUserStatus(); // Додайте цей рядок для періодичної перевірки статусу
+                // Видаляємо fetchUserStatus() звідси, оскільки тепер є окремий інтервал
             }
         }, 1000);
+
+        // Запускаємо окремий інтервал для статусу
+        startStatusUpdateInterval();
     }
 
-    // Функція для зупинки автоматичного оновлення
+    // Оновлена функція stopAutoUpdate
     function stopAutoUpdate(): void {
         if (updateInterval) {
             clearInterval(updateInterval);
             updateInterval = null;
         }
+        stopStatusUpdateInterval();
     }
 
     // Функції для роботи з історією
@@ -810,16 +865,15 @@
             : "background-color: #f5f5f5;";
     }
 
-    // Lifecycle hooks
     onMount(() => {
         console.log("UserChat mounted for user:", selectedUser.id);
-        // Видаліть цю лінію: componentLoadTime = new Date();
         currentUserId = selectedUser.id;
         fetchUserStatus();
+        loadAlaraStatus(); // Якщо потрібно
         loadMessages();
-        startAutoUpdate();
+        startAutoUpdate(); // Тепер включає і статус, і повідомлення
         startRerenderInterval();
-        // Додаємо слухач для відстеження прокрутки
+
         if (messagesContainer) {
             messagesContainer.addEventListener("scroll", checkIfAtBottom);
         }
@@ -827,13 +881,14 @@
 
     onDestroy(() => {
         console.log("UserChat destroyed");
-        stopAutoUpdate();
+        stopAutoUpdate(); // Зупиняє і повідомлення, і статус
         stopRerenderInterval();
         if (messagesContainer) {
             messagesContainer.removeEventListener("scroll", checkIfAtBottom);
         }
     });
 
+    // Оновлений реактивний блок для зміни користувача
     $: if (selectedUser?.id && selectedUser.id !== currentUserId) {
         console.log(`User changed from ${currentUserId} to ${selectedUser.id}`);
         if (updateTimeout) {
@@ -845,11 +900,13 @@
             error = null;
             sendError = null;
             lastMessageCount = 0;
-            userHumanRequired = false; // Скидаємо статус
-            stopAutoUpdate();
+            userHumanRequired = false;
+
+            stopAutoUpdate(); // Зупиняємо всі інтервали
             loadMessages();
-            fetchUserStatus(); // Додайте цей рядок
-            startAutoUpdate();
+            fetchUserStatus();
+            loadAlaraStatus();
+            startAutoUpdate(); // Запускаємо знову для нового користувача
         }, 200);
     }
 </script>
@@ -885,23 +942,22 @@
             </svg>
         </button>
         <div class="user-info">
+            <!-- Замініть цю секцію в header -->
             <div class="user-details">
-                {#key rerenderTrigger}
-                    <h2>
-                        {selectedUser.nickname ||
-                            selectedUser.name ||
-                            selectedUser.username ||
-                            selectedUser.display_name ||
-                            "Unknown User"}
-                    </h2>
-                    <div class="status">
-                        <span class="status-text">{statusInfo.label}</span>
-                        <div
-                            class="status-indicator"
-                            style="background-color: {statusInfo.color}"
-                        ></div>
-                    </div>
-                {/key}
+                <h2>
+                    {selectedUser.nickname ||
+                        selectedUser.name ||
+                        selectedUser.username ||
+                        selectedUser.display_name ||
+                        "Unknown User"}
+                </h2>
+                <div class="status">
+                    <span class="status-text">{statusInfo.label}</span>
+                    <div
+                        class="status-indicator"
+                        style="background-color: {statusInfo.color}"
+                    ></div>
+                </div>
             </div>
         </div>
         <div class="header-actions">
