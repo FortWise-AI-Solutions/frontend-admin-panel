@@ -134,9 +134,14 @@
                 console.error("Error fetching user status:", error);
                 return;
             }
+            //TODO: fix this as fast as possible later
             if (data?.username) {
-                selectedUser.username = data.username;
+                selectedUser = {
+                    ...selectedUser,
+                    username: data.username,
+                };
             }
+
 
             if (data) {
                 const oldHumanRequired = userHumanRequired;
