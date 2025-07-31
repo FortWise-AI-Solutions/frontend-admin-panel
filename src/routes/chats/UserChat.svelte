@@ -126,13 +126,16 @@
         try {
             const { data, error } = await supabase
                 .from("end_users")
-                .select("human_required, alara_status") // Додаємо alara_status
+                .select("username, human_required, alara_status") // Додаємо alara_status
                 .eq("id", parseInt(selectedUser.id))
                 .single();
 
             if (error) {
                 console.error("Error fetching user status:", error);
                 return;
+            }
+            if (data?.username) {
+                selectedUser.username = data.username;
             }
 
             if (data) {
