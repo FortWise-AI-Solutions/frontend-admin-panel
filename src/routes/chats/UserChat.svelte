@@ -952,12 +952,15 @@
         <div class="user-info">
             <!-- Замініть цю секцію в header -->
             <div class="user-details">
-                <h2>
-                    {   selectedUser.username ||
-                        selectedUser.name ||
-                        selectedUser.display_name ||
-                        "Unknown User"}
-                </h2>
+<h2>
+  {selectedUser.name || selectedUser.display_name || "Unknown User"}
+  {#if selectedUser.username}
+    &nbsp;(<a href={"https://t.me/" + selectedUser.username} target="_blank" rel="noopener noreferrer">
+      @{selectedUser.username}
+    </a>)
+  {/if}
+</h2>
+
                 <div class="status">
                     <span class="status-text">{statusInfo.label}</span>
                     <div
