@@ -20,11 +20,10 @@
     let selectedUserId: string | null = null;
     let userSelectRef: UserSelect;
 
-    // Додаємо стан для непрочитаних повідомлень
+
     let unreadMessages: Record<string, number> = {};
     let lastMessageTimes: Record<string, Date> = {};
 
-    // WebSocket або інший механізм для отримання нових повідомлень
     let websocket: WebSocket | null = null;
 
     const platforms = [
@@ -43,7 +42,6 @@
         // Ініціалізуємо WebSocket з'єднання для отримання нових повідомлень
         initializeWebSocket();
 
-        // Завантажуємо збережені непрочитані повідомлення з localStorage
         loadUnreadMessagesFromStorage();
 
         return () => {
@@ -55,7 +53,7 @@
 
     function initializeWebSocket() {
         try {
-            // Замініть на ваш WebSocket URL
+          
             websocket = new WebSocket("ws://your-websocket-url");
 
             websocket.onopen = () => {
@@ -73,7 +71,7 @@
 
             websocket.onclose = () => {
                 console.log("WebSocket disconnected");
-                // Спробуємо перепідключитися через 5 секунд
+               
                 setTimeout(() => {
                     initializeWebSocket();
                 }, 5000);
@@ -109,7 +107,7 @@
             ? new Date(messageTime)
             : new Date();
 
-        // Оновлюємо компонент UserSelect
+      
         if (userSelectRef) {
             userSelectRef.updateUnreadMessages(
                 userId,
@@ -118,7 +116,7 @@
             );
         }
 
-        // Зберігаємо в localStorage
+      
         saveUnreadMessagesToStorage();
 
         console.log(
@@ -239,11 +237,11 @@
     function handleUserSelect(user: User): void {
         console.log("Вибрано користувача:", user);
 
-        // Скидаємо лічильник непрочитаних повідомлень для вибраного користувача
+       
         if (unreadMessages[user.id] > 0) {
             handleMessagesRead(user.id);
 
-            // Відправляємо повідомлення на сервер про прочитання
+           
             if (websocket && websocket.readyState === WebSocket.OPEN) {
                 websocket.send(
                     JSON.stringify({
@@ -258,20 +256,20 @@
         onUserSelect(user);
     }
 
-    // Оновлюємо UserSelect при зміні clientId
+   
     $: if (clientId !== undefined && userSelectRef) {
         userSelectRef.refreshUsers();
     }
 
     $: activeFiltersCount = (activePlatform ? 1 : 0) + (activeStatus ? 1 : 0);
 
-    // Підраховуємо загальну кількість непрочитаних повідомлень
+    
     $: totalUnreadCount = Object.values(unreadMessages).reduce(
         (sum, count) => sum + count,
         0,
     );
 
-    // Експортуємо функції для використання ззовні
+  
     export function addNewMessage(userId: string, messageTime?: Date) {
         handleNewMessage(userId, messageTime?.toISOString());
     }
@@ -288,7 +286,7 @@
         saveUnreadMessagesToStorage();
     }
 
-    // Функція для тестування (видаліть у продакшені)
+
     function simulateNewMessage() {
         const testUserId = "test-user-1";
         handleNewMessage(testUserId);
@@ -298,11 +296,11 @@
     let isSearchExpanded: boolean = false;
     let searchInputRef: HTMLInputElement;
 
-    // Додати функції для пошуку
+
     function toggleSearch() {
         isSearchExpanded = !isSearchExpanded;
         if (isSearchExpanded) {
-            // Фокусуємося на input після анімації
+           
             setTimeout(() => {
                 searchInputRef?.focus();
             }, 300);
@@ -571,7 +569,7 @@
     }
 
     .block-content.active .block-text {
-        color: var(--color-ffffff);
+        color: var(--color-fff);
         font-weight: 500;
     }
 
@@ -643,7 +641,7 @@
     }
 
     .users-header h2 {
-        color: var(--color-ffffff);
+        color: var(--color-fff);
         font-size: 14px;
         font-weight: 600;
         margin: 0;

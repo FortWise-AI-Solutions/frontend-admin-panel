@@ -27,6 +27,7 @@
     .app {
         display: flex;
         height: 100%;
+        min-height: 100vh;
     }
 
     main {
