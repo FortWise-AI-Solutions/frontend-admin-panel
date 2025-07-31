@@ -945,9 +945,8 @@
             <!-- Замініть цю секцію в header -->
             <div class="user-details">
                 <h2>
-                    {selectedUser.nickname ||
+                    {   selectedUser.username ||
                         selectedUser.name ||
-                        selectedUser.username ||
                         selectedUser.display_name ||
                         "Unknown User"}
                 </h2>
