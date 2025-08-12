@@ -142,7 +142,6 @@
                 };
             }
 
-
             if (data) {
                 const oldHumanRequired = userHumanRequired;
                 const oldStatus = selectedUser.status;
@@ -952,14 +951,31 @@
         <div class="user-info">
             <!-- Замініть цю секцію в header -->
             <div class="user-details">
-<h2>
-  {selectedUser.name || selectedUser.display_name || "Unknown User"}
-  {#if selectedUser.username}
-    &nbsp;(<a href={"https://t.me/" + selectedUser.username} target="_blank" rel="noopener noreferrer">
-      @{selectedUser.username}
-    </a>)
-  {/if}
-</h2>
+                <h2>
+                    {selectedUser.name ||
+                        selectedUser.display_name ||
+                        "Unknown User"}
+                    {#if selectedUser.username && selectedUser.platform}
+                        {#if ["Telegram", "telegram", "TELEGRAM"].includes(selectedUser.platform)}
+                            &nbsp;(<a
+                                href={"https://t.me/" + selectedUser.username}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                @{selectedUser.username}
+                            </a>)
+                        {:else if ["Instagram", "instagram", "INSTAGRAM"].includes(selectedUser.platform)}
+                            &nbsp;(<a
+                                href={"https://instagram.com/" +
+                                    selectedUser.username}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                @{selectedUser.username}
+                            </a>)
+                        {/if}
+                    {/if}
+                </h2>
 
                 <div class="status">
                     <span class="status-text">{statusInfo.label}</span>
