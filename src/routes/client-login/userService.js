@@ -57,7 +57,9 @@ export async function getFilteredUsers() {
         console.log(`Loading users via API for client_id: ${clientId}`);
         
         // Use new API endpoint instead of direct Supabase query
-        const response = await fetch(`${PUBLIC_WEB_SERVER}/users/${clientId}`, {
+        // For general admins (clientId is null), use 'all' as the path parameter
+        const apiPath = clientId ? `users/${clientId}` : 'users/all';
+        const response = await fetch(`${PUBLIC_WEB_SERVER}/${apiPath}`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -128,7 +130,70 @@ async function getFilteredUsersFromSupabase() {
         }
         
         console.log(`Fetched ${data?.length || 0} users from Supabase fallback`);
-        return data || [];
+        
+        // For each user, get the time of the last message
+        const usersWithLastMessage = await Promise.all(
+            (data || []).map(async (user) => {
+                try {
+                    // Get the last message for the user directly from Supabase
+                    const { data: messages, error: msgError } = await supabase
+                        .from('messages')
+                        .select('time')
+                        .eq('end_user_id', user.id)
+                        .order('time', { ascending: false })
+                        .limit(1);
+                    
+                    if (msgError) {
+                        console.error(`Error getting last message for user ${user.id}:`, msgError);
+                        return {
+                            ...user,
+                            last_message_at: null
+                        };
+                    }
+                    
+                    const lastMessage = messages && messages.length > 0 ? messages[0] : null;
+                    const lastMessageTime = lastMessage ? lastMessage.time : null;
+                    
+                    return {
+                        ...user,
+                        last_message_at: lastMessageTime
+                    };
+                } catch (error) {
+                    console.error(`Error getting last message for user ${user.id}:`, error);
+                    return {
+                        ...user,
+                        last_message_at: null
+                    };
+                }
+            })
+        );
+        
+        // Sort users according to the same logic as the API:
+        // 1. Human Required users at the top, sorted by last message
+        // 2. Others below, also sorted by last message
+        const sortedUsers = usersWithLastMessage.sort((a, b) => {
+            // Priority 1: Human Required status (highest priority)
+            const aHumanRequired = a.human_required === true;
+            const bHumanRequired = b.human_required === true;
+
+            if (aHumanRequired && !bHumanRequired) return -1;
+            if (!aHumanRequired && bHumanRequired) return 1;
+
+            // Priority 2: Time of the last message (newest first)
+            const aLastMessage = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+            const bLastMessage = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+
+            if (aLastMessage !== bLastMessage) {
+                return bLastMessage - aLastMessage; // Descending order (newest first)
+            }
+
+            // Priority 3: Fallback to creation time
+            const aCreated = new Date(a.created_at).getTime();
+            const bCreated = new Date(b.created_at).getTime();
+            return bCreated - aCreated;
+        });
+        
+        return sortedUsers;
         
     } catch (error) {
         console.error('Error in getFilteredUsersFromSupabase:', error);
