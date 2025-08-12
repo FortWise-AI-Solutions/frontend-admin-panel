@@ -13,7 +13,7 @@ export interface User {
     [key: string]: any; // для додаткових полів
 
     unreadCount?: number;
-    lastMessageTime?: Date;
+    lastMessageTime?: Date | null;
 }
 
 // Додаємо тип для аутентифікованого користувача
