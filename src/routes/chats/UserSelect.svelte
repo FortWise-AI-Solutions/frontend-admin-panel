@@ -159,19 +159,10 @@
 
             // Обробляємо користувачів та встановлюємо правильні статуси
             users = loadedUsers.map((user) => {
-                let lastMessageTime = null;
-
-                if ((user as any).last_message_at) {
-                    lastMessageTime = new Date((user as any).last_message_at);
-                } else if (lastMessageTimes[user.id]) {
-                    // Fallback to local cache if API didn't return time
-                    lastMessageTime = lastMessageTimes[user.id];
-                }
-
                 const userWithStatus = {
                     ...user,
                     unreadCount: unreadMessages[user.id] || 0,
-                    lastMessageTime: lastMessageTime,
+                    lastMessageTime: lastMessageTimes[user.id],
                 };
                 // Встановлюємо статус на основі полів з бази даних
                 const calculatedStatus = getUserStatus(userWithStatus);
@@ -212,14 +203,17 @@
         );
     }
 
+    // Оновлена функція сортування з пріоритетом для Human Required
     function sortUsers(users: UserWithMessages[]): UserWithMessages[] {
         return [...users].sort((a, b) => {
             const aUnread = a.unreadCount || 0;
             const bUnread = b.unreadCount || 0;
+            const aStatus = getUserStatus(a);
+            const bStatus = getUserStatus(b);
 
             // НАЙВИЩИЙ ПРІОРИТЕТ: Users з human_required статусом завжди першими
-            const aHumanRequired = getUserStatus(a) === "human-required";
-            const bHumanRequired = getUserStatus(b) === "human-required";
+            const aHumanRequired = aStatus === "human-required";
+            const bHumanRequired = bStatus === "human-required";
 
             if (aHumanRequired && !bHumanRequired) return -1;
             if (!aHumanRequired && bHumanRequired) return 1;
@@ -232,8 +226,48 @@
                 if (aUnread > 0 && bUnread > 0) {
                     return bUnread - aUnread;
                 }
+
+                // Потім по часу останнього повідомлення
+                if (a.lastMessageTime && b.lastMessageTime) {
+                    return (
+                        b.lastMessageTime.getTime() -
+                        a.lastMessageTime.getTime()
+                    );
+                }
+                if (a.lastMessageTime && !b.lastMessageTime) return -1;
+                if (!a.lastMessageTime && b.lastMessageTime) return 1;
+
+                // Потім по імені
+                const aName = a.nickname || a.name || a.username || "";
+                const bName = b.nickname || b.name || b.username || "";
+                return aName.localeCompare(bName);
             }
-            return 0;
+
+            // Для користувачів БЕЗ human_required статусу:
+            // Priority 2: Users with unread messages
+            if (aUnread > 0 && bUnread === 0) return -1;
+            if (bUnread > 0 && aUnread === 0) return 1;
+
+            // Priority 3: Among users with unread messages, sort by unread count (descending)
+            if (aUnread > 0 && bUnread > 0) {
+                return bUnread - aUnread;
+            }
+
+            // Priority 4: Sort by last message time (most recent first)
+            if (a.lastMessageTime && b.lastMessageTime) {
+                return (
+                    b.lastMessageTime.getTime() - a.lastMessageTime.getTime()
+                );
+            }
+
+            // Priority 5: Users with last message time come before those without
+            if (a.lastMessageTime && !b.lastMessageTime) return -1;
+            if (!a.lastMessageTime && b.lastMessageTime) return 1;
+
+            // Priority 6: Fallback to alphabetical sorting by name
+            const aName = a.nickname || a.name || a.username || "";
+            const bName = b.nickname || b.name || b.username || "";
+            return aName.localeCompare(bName);
         });
     }
 
