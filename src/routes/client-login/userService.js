@@ -1,5 +1,6 @@
 import { supabase } from '../../lib/supabaseClient';
 import { getCurrentUser, canViewAllUsers, getClientIdForFiltering } from './userUtils';
+import { sortUsersBackend } from '../../lib/utils/userSorting';
 
 /**
  * @typedef {Object} User
@@ -41,14 +42,14 @@ export async function getFilteredUsers() {
     console.log('Current user:', currentUser);
     
     try {
-        let query = supabase.from('end_users').select('*');
+        let usersQuery = supabase.from('end_users').select('*');
         
-        // Якщо користувач не alara_admin, фільтруємо по client_id
+        // If the user is not alara_admin, filter by client_id
         if (!canViewAllUsers(currentUser)) {
             const clientId = getClientIdForFiltering(currentUser);
             
             if (clientId) {
-                query = query.eq('client_id', clientId);
+                usersQuery = usersQuery.eq('client_id', clientId);
                 console.log(`Filtering users by client_id: ${clientId}`);
             } else {
                 console.warn('No client_id found for filtering, returning empty array');
@@ -58,15 +59,56 @@ export async function getFilteredUsers() {
             console.log('Super admin access - showing all users');
         }
         
-        const { data, error } = await query.order('created_at', { ascending: false });
+        const { data: users, error: usersError } = await usersQuery;
         
-        if (error) {
-            console.error('Error fetching users:', error);
-            throw error;
+        if (usersError) {
+            console.error('Error fetching users:', usersError);
+            throw usersError;
         }
         
-        console.log(`Fetched ${data?.length || 0} users`);
-        return data || [];
+        if (!users || users.length === 0) {
+            console.log('No users found');
+            return [];
+        }
+        
+        // get last message time for all users in one query
+        const userIds = users.map(user => user.id);
+        console.log(`Fetching last message times for ${userIds.length} users`);
+        
+        // use aggregate query to get MAX(time) for each end_user_id
+        const { data: messagesData, error: messagesError } = await supabase
+            .from('messages')
+            .select('end_user_id, time')
+            .in('end_user_id', userIds)
+            .order('end_user_id')
+            .order('time', { ascending: false });
+        
+        if (messagesError) {
+            console.error('Error fetching messages:', messagesError);
+            // continue without message times, but with a warning
+            console.warn('Continuing without message times due to error');
+        }
+        
+        // create a map of last messages (only the first message for each user through ORDER BY)
+        const lastMessageMap = new Map();
+        if (messagesData) {
+            messagesData.forEach(msg => {
+                if (!lastMessageMap.has(msg.end_user_id)) {
+                    lastMessageMap.set(msg.end_user_id, new Date(msg.time));
+                }
+            });
+        }
+        
+        // process users with last message time
+        const processedUsers = users.map(user => ({
+            ...user,
+            lastMessageTime: lastMessageMap.get(user.id) || null
+        }));
+        
+        // Use centralized sorting function from userSorting.ts
+        const sortedUsers = sortUsersBackend(processedUsers);
+        
+        return sortedUsers;
         
     } catch (error) {
         console.error('Error in getFilteredUsers:', error);
