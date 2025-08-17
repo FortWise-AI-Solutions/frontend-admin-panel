@@ -5,6 +5,7 @@
         getFilteredUsers,
         getCurrentUserInfo,
     } from "../client-login/userService";
+    import { sortUsers, getUserStatus } from "../../lib/utils/userSorting";
     import type { User } from "../../lib/types/type";
 
     interface CurrentUserInfo {
@@ -60,21 +61,7 @@
         "Human Required": "human-required",
     };
 
-    // Функція для визначення статусу користувача на основі полів з бази даних
-    function getUserStatus(user: UserWithMessages): string {
-        // Якщо human_required = true, то статус завжди "human-required"
-        if (user.human_required === true) {
-            return "human-required";
-        }
-        // Якщо human_required не true, то дивимось на alara_status
-        if (user.alara_status === true) {
-            return "online";
-        } else if (user.alara_status === false) {
-            return "offline";
-        }
-        // Якщо немає інформації про статуси
-        return "no-info";
-    }
+    // Використовуємо централізовану функцію для визначення статусу користувача
 
     // Генерація рандомного градієнта для аватара
     function generateGradient(): string {
@@ -159,19 +146,13 @@
 
             // Обробляємо користувачів та встановлюємо правильні статуси
             users = loadedUsers.map((user) => {
-                let lastMessageTime = null;
-
-                if ((user as any).last_message_at) {
-                    lastMessageTime = new Date((user as any).last_message_at);
-                } else if (lastMessageTimes[user.id]) {
-                    // Fallback to local cache if API didn't return time
-                    lastMessageTime = lastMessageTimes[user.id];
-                }
-
+                const userWithMessages = user as UserWithMessages;
                 const userWithStatus = {
-                    ...user,
-                    unreadCount: unreadMessages[user.id] || 0,
-                    lastMessageTime: lastMessageTime,
+                    ...userWithMessages,
+                    unreadCount: unreadMessages[userWithMessages.id] || 0,
+                    lastMessageTime:
+                        userWithMessages.lastMessageTime ||
+                        lastMessageTimes[userWithMessages.id],
                 };
                 // Встановлюємо статус на основі полів з бази даних
                 const calculatedStatus = getUserStatus(userWithStatus);
@@ -212,35 +193,14 @@
         );
     }
 
-    function sortUsers(users: UserWithMessages[]): UserWithMessages[] {
-        return [...users].sort((a, b) => {
-            const aUnread = a.unreadCount || 0;
-            const bUnread = b.unreadCount || 0;
-
-            // НАЙВИЩИЙ ПРІОРИТЕТ: Users з human_required статусом завжди першими
-            const aHumanRequired = getUserStatus(a) === "human-required";
-            const bHumanRequired = getUserStatus(b) === "human-required";
-
-            if (aHumanRequired && !bHumanRequired) return -1;
-            if (!aHumanRequired && bHumanRequired) return 1;
-
-            // Якщо обидва мають human_required статус, сортуємо їх між собою
-            if (aHumanRequired && bHumanRequired) {
-                // Спочатку по кількості непрочитаних повідомлень
-                if (aUnread > 0 && bUnread === 0) return -1;
-                if (bUnread > 0 && aUnread === 0) return 1;
-                if (aUnread > 0 && bUnread > 0) {
-                    return bUnread - aUnread;
-                }
-            }
-            return 0;
-        });
+    function sortUsersList(users: UserWithMessages[]): UserWithMessages[] {
+        return sortUsers(users, lastMessageTimes);
     }
 
     export let searchQuery: string = "";
 
     // Оновлена фільтрація користувачів з правильними статусами
-    $: filteredAndSortedUsers = sortUsers(
+    $: filteredAndSortedUsers = sortUsersList(
         users.filter((user) => {
             let platformMatch = true;
             let statusMatch = true;
