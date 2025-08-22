@@ -26,8 +26,12 @@
 
     export let selectedUserId: string | null = null;
     export let onUserSelect: (user: User) => void = () => {};
-    export let activePlatform: "WhatsApp" | "Telegram" | "Instagram" | null =
-        null;
+    export let activePlatform:
+        | "WhatsApp"
+        | "Telegram"
+        | "Instagram"
+        | "Messenger"
+        | null = null;
     export let activeStatus: "Online" | "Offline" | "Human Required" | null =
         null;
     export let clientId: number | undefined = undefined;
@@ -53,6 +57,7 @@
         WhatsApp: ["WhatsApp", "whatsapp", "WHATSAPP"],
         Telegram: ["Telegram", "telegram", "TELEGRAM"],
         Instagram: ["Instagram", "instagram", "INSTAGRAM"],
+        Messenger: ["Messenger", "messenger", "MESSENGER"],
     };
 
     // Оновлений маппінг статусів фільтра до статусів користувачів
