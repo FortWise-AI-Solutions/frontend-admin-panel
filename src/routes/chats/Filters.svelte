@@ -3,13 +3,14 @@
     import WhatsApp from "../../lib/images/filters/whatsApp.png";
     import Telegram from "../../lib/images/filters/telega.png";
     import Instagram from "../../lib/images/filters/instagram.png";
+    import Messenger from "../../lib/images/filters/messenger.png";
     import Online from "../../lib/images/filters/onine.png";
     import Offline from "../../lib/images/filters/offline.png";
     import HumRequired from "../../lib/images/filters/flag.png";
     import UserSelect from "./UserSelect.svelte";
     import type { User } from "../../lib/types/type";
 
-    type Platform = "WhatsApp" | "Telegram" | "Instagram" | null;
+    type Platform = "WhatsApp" | "Telegram" | "Instagram" | "Messenger" | null;
     type Status = "Online" | "Offline" | "Human Required" | null;
 
     export let onUserSelect: (user: User) => void = () => {};
@@ -29,6 +30,7 @@
         { name: "WhatsApp", icon: WhatsApp },
         { name: "Telegram", icon: Telegram },
         { name: "Instagram", icon: Instagram },
+        { name: "Messenger", icon: Messenger },
     ];
 
     const statuses = [
@@ -392,6 +394,9 @@
                         class="search-button"
                         class:active={isSearchExpanded}
                         on:click={toggleSearch}
+                        aria-label={isSearchExpanded
+                            ? "Close search"
+                            : "Search users"}
                         title={isSearchExpanded
                             ? "Close search"
                             : "Search users"}
