@@ -624,8 +624,18 @@
     }
 
     /* Скролбар */
-    .block-users::-webkit-scrollbar {
+    .block-users {
+        overflow-y: auto;
+        scrollbar-width: none; /* Приховує скролбар для Firefox */
+    }
+
+    .block-users:hover::-webkit-scrollbar,
+    .block-users:active::-webkit-scrollbar {
         width: 6px;
+    }
+
+    .block-users::-webkit-scrollbar {
+        width: 0; /* Приховує скролбар за замовчуванням */
     }
 
     .block-users::-webkit-scrollbar-track {

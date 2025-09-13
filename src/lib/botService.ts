@@ -65,9 +65,30 @@ export class BotService {
     // Надсилання повідомлення через WhatsApp
     static async sendWhatsAppMessage(botToken: string, chatId: string, message: string): Promise<boolean> {
         try {
-            // Тут буде ваша логіка для WhatsApp API
-            console.log('Sending WhatsApp message with token from DB:', botToken.substring(0, 10) + '...');
-            // Поки що повертаємо true для тестування
+            console.log('Sending WhatsApp message to:', chatId);
+            
+            const response = await fetch('https://aa472d19669c.ngrok-free.app/webhooks/whatsapp/4', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'ngrok-skip-browser-warning': 'true'
+                },
+                body: JSON.stringify({
+                    token: botToken,
+                    chat_id: chatId,
+                    message: message,
+                    type: 'text'
+                }),
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('WhatsApp API error:', response.status, errorText);
+                return false;
+            }
+
+            const result = await response.json();
+            console.log('WhatsApp message sent successfully:', result);
             return true;
         } catch (error) {
             console.error('Error sending WhatsApp message:', error);
@@ -78,9 +99,30 @@ export class BotService {
     // Надсилання повідомлення через Instagram
     static async sendInstagramMessage(botToken: string, chatId: string, message: string): Promise<boolean> {
         try {
-            // Тут буде ваша логіка для Instagram API
-            console.log('Sending Instagram message with token from DB:', botToken.substring(0, 10) + '...');
-            // Поки що повертаємо true для тестування
+            console.log('Sending Instagram message to:', chatId);
+            
+            const response = await fetch('https://4645c032e822.ngrok-free.app/webhooks/instagram/5', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'ngrok-skip-browser-warning': 'true'
+                },
+                body: JSON.stringify({
+                    token: botToken,
+                    chat_id: chatId,
+                    message: message,
+                    type: 'text'
+                }),
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Instagram API error:', response.status, errorText);
+                return false;
+            }
+
+            const result = await response.json();
+            console.log('Instagram message sent successfully:', result);
             return true;
         } catch (error) {
             console.error('Error sending Instagram message:', error);
