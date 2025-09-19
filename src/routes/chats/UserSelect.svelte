@@ -5,6 +5,7 @@
         getFilteredUsers,
         getCurrentUserInfo,
     } from "../client-login/userService";
+    import { sortUsers, getUserStatus } from "../../lib/utils/userSorting";
     import type { User } from "../../lib/types/type";
 
     interface CurrentUserInfo {
@@ -19,21 +20,25 @@
 
     interface UserWithMessages extends User {
         unreadCount?: number;
-        lastMessageTime?: Date;
-        // Додаємо поля для статусів з бази даних
         alara_status?: boolean;
         human_required?: boolean;
     }
 
     export let selectedUserId: string | null = null;
     export let onUserSelect: (user: User) => void = () => {};
-    export let activePlatform: "WhatsApp" | "Telegram" | "Instagram" | null =
-        null;
+    export let activePlatform:
+        | "WhatsApp"
+        | "Telegram"
+        | "Instagram"
+        | "Messenger"
+        | "Web"
+        | null = null;
     export let activeStatus: "Online" | "Offline" | "Human Required" | null =
         null;
     export let clientId: number | undefined = undefined;
     export let unreadMessages: Record<string, number> = {};
-    export let lastMessageTimes: Record<string, Date> = {};
+    // Keep this as a reference but don't use it for sorting
+    export const lastMessageTimes: Record<string, Date> = {};
 
     let users: UserWithMessages[] = [];
     let isLoading = true;
@@ -53,6 +58,8 @@
         WhatsApp: ["WhatsApp", "whatsapp", "WHATSAPP"],
         Telegram: ["Telegram", "telegram", "TELEGRAM"],
         Instagram: ["Instagram", "instagram", "INSTAGRAM"],
+        Messenger: ["Messenger", "messenger", "MESSENGER"],
+        Web: ["Web", "web", "WEB"],
     };
 
     // Оновлений маппінг статусів фільтра до статусів користувачів
@@ -62,21 +69,7 @@
         "Human Required": "human-required",
     };
 
-    // Функція для визначення статусу користувача на основі полів з бази даних
-    function getUserStatus(user: UserWithMessages): string {
-        // Якщо human_required = true, то статус завжди "human-required"
-        if (user.human_required === true) {
-            return "human-required";
-        }
-        // Якщо human_required не true, то дивимось на alara_status
-        if (user.alara_status === true) {
-            return "online";
-        } else if (user.alara_status === false) {
-            return "offline";
-        }
-        // Якщо немає інформації про статуси
-        return "no-info";
-    }
+    // Використовуємо централізовану функцію для визначення статусу користувача
 
     // Генерація рандомного градієнта для аватара
     function generateGradient(): string {
@@ -157,16 +150,20 @@
                 clientId,
             );
 
-            const loadedUsers = await getFilteredUsers(clientId);
+            const loadedUsers = await getFilteredUsers();
 
-            // Обробляємо користувачів та встановлюємо правильні статуси
+            // Process users and set correct statuses
             users = loadedUsers.map((user) => {
+                const userWithMessages = user as UserWithMessages;
+                // Use lastMessageTime from Supabase (set in userService.js) as the primary source
+                // Fall back to lastMessageTimes from props only if needed
                 const userWithStatus = {
-                    ...user,
-                    unreadCount: unreadMessages[user.id] || 0,
-                    lastMessageTime: lastMessageTimes[user.id],
+                    ...userWithMessages,
+                    unreadCount: unreadMessages[userWithMessages.id] || 0,
+                    // Only use lastMessageTime from Supabase, not from frontend
+                    lastMessageTime: userWithMessages.lastMessageTime,
                 };
-                // Встановлюємо статус на основі полів з бази даних
+                // Set status based on database fields
                 const calculatedStatus = getUserStatus(userWithStatus);
                 userWithStatus.status = calculatedStatus;
                 return userWithStatus;
@@ -205,78 +202,14 @@
         );
     }
 
-    // Оновлена функція сортування з пріоритетом для Human Required
-    function sortUsers(users: UserWithMessages[]): UserWithMessages[] {
-        return [...users].sort((a, b) => {
-            const aUnread = a.unreadCount || 0;
-            const bUnread = b.unreadCount || 0;
-            const aStatus = getUserStatus(a);
-            const bStatus = getUserStatus(b);
-
-            // НАЙВИЩИЙ ПРІОРИТЕТ: Users з human_required статусом завжди першими
-            const aHumanRequired = aStatus === "human-required";
-            const bHumanRequired = bStatus === "human-required";
-
-            if (aHumanRequired && !bHumanRequired) return -1;
-            if (!aHumanRequired && bHumanRequired) return 1;
-
-            // Якщо обидва мають human_required статус, сортуємо їх між собою
-            if (aHumanRequired && bHumanRequired) {
-                // Спочатку по кількості непрочитаних повідомлень
-                if (aUnread > 0 && bUnread === 0) return -1;
-                if (bUnread > 0 && aUnread === 0) return 1;
-                if (aUnread > 0 && bUnread > 0) {
-                    return bUnread - aUnread;
-                }
-
-                // Потім по часу останнього повідомлення
-                if (a.lastMessageTime && b.lastMessageTime) {
-                    return (
-                        b.lastMessageTime.getTime() -
-                        a.lastMessageTime.getTime()
-                    );
-                }
-                if (a.lastMessageTime && !b.lastMessageTime) return -1;
-                if (!a.lastMessageTime && b.lastMessageTime) return 1;
-
-                // Потім по імені
-                const aName = a.nickname || a.name || a.username || "";
-                const bName = b.nickname || b.name || b.username || "";
-                return aName.localeCompare(bName);
-            }
-
-            // Для користувачів БЕЗ human_required статусу:
-            // Priority 2: Users with unread messages
-            if (aUnread > 0 && bUnread === 0) return -1;
-            if (bUnread > 0 && aUnread === 0) return 1;
-
-            // Priority 3: Among users with unread messages, sort by unread count (descending)
-            if (aUnread > 0 && bUnread > 0) {
-                return bUnread - aUnread;
-            }
-
-            // Priority 4: Sort by last message time (most recent first)
-            if (a.lastMessageTime && b.lastMessageTime) {
-                return (
-                    b.lastMessageTime.getTime() - a.lastMessageTime.getTime()
-                );
-            }
-
-            // Priority 5: Users with last message time come before those without
-            if (a.lastMessageTime && !b.lastMessageTime) return -1;
-            if (!a.lastMessageTime && b.lastMessageTime) return 1;
-
-            // Priority 6: Fallback to alphabetical sorting by name
-            const aName = a.nickname || a.name || a.username || "";
-            const bName = b.nickname || b.name || b.username || "";
-            return aName.localeCompare(bName);
-        });
+    function sortUsersList(users: UserWithMessages[]): UserWithMessages[] {
+        return sortUsers(users);
     }
 
     export let searchQuery: string = "";
 
     // Оновлена фільтрація користувачів з правильними статусами
-    $: filteredAndSortedUsers = sortUsers(
+    $: filteredAndSortedUsers = sortUsersList(
         users.filter((user) => {
             let platformMatch = true;
             let statusMatch = true;
@@ -318,7 +251,8 @@
         users = users.map((user) => ({
             ...user,
             unreadCount: unreadMessages[user.id] || 0,
-            lastMessageTime: lastMessageTimes[user.id] || user.lastMessageTime,
+            // Keep the original lastMessageTime from Supabase
+            // Don't override with frontend data
         }));
     }
 
@@ -336,9 +270,7 @@
         lastMessageTime?: Date,
     ) {
         unreadMessages[userId] = count;
-        if (lastMessageTime) {
-            lastMessageTimes[userId] = lastMessageTime;
-        }
+        // Don't update lastMessageTimes anymore - rely on Supabase data only
         updateUserUnreadCount(userId, count);
     }
 
@@ -432,9 +364,7 @@
                         <div
                             class="human-required-indicator"
                             title="Human Required"
-                        >
-                            
-                        </div>
+                        ></div>
                     {/if}
                 </div>
                 <div class="text">
