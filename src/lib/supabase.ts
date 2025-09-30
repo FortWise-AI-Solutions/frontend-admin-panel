@@ -96,10 +96,29 @@ export async function getEndUsers(clientId?: number) {
 
 // Function to get bots
 export async function getBots(platform?: string) {
+    const user = getCurrentUser()
+    if (!user) {
+        return [] as Bot[]
+    }
+
+    const isSuperAdmin = user.role === "alara_admin"
+    
+    let clientId: number | null = null
+    if (user.client_id) {
+        clientId = Number(user.client_id)
+    } else if (user.table === 'clients' && user.id) {
+        clientId = Number(user.id)
+    }
+
     let query = supabase
         .from('bots')
         .select('*')
         .order('name')
+    
+    // Only filter by client_id if user is not a super admin and has a valid client_id
+    if (!isSuperAdmin && clientId && !isNaN(clientId)) {
+        query = query.eq('client_id', clientId)
+    }
 
     if (platform && platform !== 'All') {
         query = query.eq('platform', platform)
