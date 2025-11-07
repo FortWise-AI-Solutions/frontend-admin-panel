@@ -11,6 +11,7 @@
         getBots,
         getAgentPrompts,
         saveAgentPrompt,
+        restoreFromHistory,
     } from "../../lib/supabase";
     import type { Bot, AgentPrompt } from "../../lib/supabase";
     import { getCurrentUser } from "../../lib/supabase";
@@ -242,6 +243,85 @@
                     [type]: selectedAgent.prompts[type].text,
                 };
             }
+        }
+    }
+
+    // Restore prompt from history
+    async function restorePrompt(): Promise<void> {
+        if (!selectedAgent) return;
+
+        try {
+            // Find existing prompt in database
+            const allPrompts = await getAgentPrompts(selectedAgent.id);
+            const existingPrompt = allPrompts.find(
+                (p) => p.bot_id === selectedAgent!.id,
+            );
+
+            if (!existingPrompt || !existingPrompt.id) {
+                showNotification = true;
+                notificationMessage = "No prompt found to restore";
+                notificationType = "error";
+                setTimeout(() => {
+                    showNotification = false;
+                }, 3000);
+                return;
+            }
+
+            // Check if history exists
+            if (!existingPrompt.prompts.history) {
+                showNotification = true;
+                notificationMessage = "No history available to restore";
+                notificationType = "error";
+                setTimeout(() => {
+                    showNotification = false;
+                }, 3000);
+                return;
+            }
+
+            // Restore the specific prompt type
+            const result = await restoreFromHistory(
+                existingPrompt.id,
+                activePromptType,
+            );
+
+            if (result.success && result.prompts) {
+                // Update local state with restored prompts
+                selectedAgent.prompts.call_human.text =
+                    result.prompts.call_human.text;
+                selectedAgent.prompts.company.text =
+                    result.prompts.company.text;
+                selectedAgent.prompts.sales.text = result.prompts.sales.text;
+
+                // Update edited prompts
+                editedPrompts = {
+                    call_human: result.prompts.call_human.text,
+                    company: result.prompts.company.text,
+                    sales: result.prompts.sales.text,
+                };
+
+                // Update agents list
+                agents = agents.map((a) =>
+                    a.id === selectedAgent!.id ? selectedAgent! : a,
+                ) as Agent[];
+
+                // Show success notification
+                showNotification = true;
+                notificationMessage = `${activePromptType === "call_human" ? "Call Human" : activePromptType === "company" ? "Company" : "Sales"} prompt is restored `;
+                notificationType = "success";
+
+                setTimeout(() => {
+                    showNotification = false;
+                }, 3000);
+            }
+        } catch (error) {
+            console.error("Error restoring prompt:", error);
+            showNotification = true;
+            notificationMessage = "Failed to restore prompt";
+            notificationType = "error";
+
+            setTimeout(() => {
+                showNotification = false;
+            }, 3000);
         }
     }
 
@@ -506,6 +586,23 @@
                 </div>
 
                 <div class="editor-footer">
+                    <button class="restore-button" on:click={restorePrompt}>
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <polyline points="1 4 1 10 7 10"></polyline>
+                            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                        </svg>
+                        Restore Previous
+                    </button>
                     <button class="save-button" on:click={savePrompts}>
                         Save Changes
                     </button>
@@ -872,7 +969,31 @@
     .editor-footer {
         display: flex;
         justify-content: flex-end;
+        gap: 12px;
         margin-top: 16px;
+    }
+
+    .restore-button {
+        padding: 10px 20px;
+        background-color: var(--color-121214);
+        border: 1px solid var(--color-530549);
+        border-radius: 4px;
+        color: var(--color-530549);
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .restore-button:hover {
+        background-color: var(--color-530549);
+        color: var(--color-fff);
+    }
+
+    .restore-button svg {
+        flex-shrink: 0;
     }
 
     .save-button {

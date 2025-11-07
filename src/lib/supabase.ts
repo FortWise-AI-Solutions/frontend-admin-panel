@@ -61,14 +61,21 @@ export interface PromptContent {
     text: string
 }
 
-export interface AgentPrompt {
-    id: number
-    bot_id: number | null
-    prompts: {
+export interface PromptsData {
+    call_human: PromptContent
+    company: PromptContent
+    sales: PromptContent
+    history?: {
         call_human: PromptContent
         company: PromptContent
         sales: PromptContent
     }
+}
+
+export interface AgentPrompt {
+    id: number
+    bot_id: number | null
+    prompts: PromptsData
     updated_at: string | null
     updated_by: string | null
 }
@@ -154,7 +161,7 @@ export async function getAgentPrompts(botId?: number) {
     return data as AgentPrompt[] || []
 }
 
-// Function to save agent prompts
+// Function to save agent prompts with version history
 export async function saveAgentPrompt(promptData: Partial<AgentPrompt>) {
     const { id, ...rest } = promptData
     let result;
@@ -163,17 +170,40 @@ export async function saveAgentPrompt(promptData: Partial<AgentPrompt>) {
     const user = getCurrentUser()
     
     if (id) {
-        // Update existing prompt
+        // Update existing prompt - first get current version for history
+        const { data: currentPrompt, error: fetchError } = await supabase
+            .from('agent_prompts')
+            .select('prompts')
+            .eq('id', id)
+            .single()
+        
+        if (fetchError) {
+            console.error('Error fetching current prompt:', fetchError)
+            throw fetchError
+        }
+
+        // Save current version to history before updating
+        const updatedPrompts: PromptsData = {
+            call_human: promptData.prompts!.call_human,
+            company: promptData.prompts!.company,
+            sales: promptData.prompts!.sales,
+            history: {
+                call_human: currentPrompt.prompts.call_human,
+                company: currentPrompt.prompts.company,
+                sales: currentPrompt.prompts.sales
+            }
+        }
+
         result = await supabase
             .from('agent_prompts')
             .update({
                 ...rest,
+                prompts: updatedPrompts,
                 updated_at: new Date().toISOString(),
                 updated_by: user?.email || user?.name || 'unknown'
             })
             .eq('id', id)
     } else if (promptData.bot_id) {
-        // Create new prompt
         result = await supabase
             .from('agent_prompts')
             .insert({
@@ -193,4 +223,67 @@ export async function saveAgentPrompt(promptData: Partial<AgentPrompt>) {
     }
 
     return result
+}
+
+// Function to restore a specific prompt type from history
+export async function restoreFromHistory(promptId: number, promptType: 'call_human' | 'company' | 'sales') {
+    const { data: currentPrompt, error: fetchError } = await supabase
+        .from('agent_prompts')
+        .select('prompts')
+        .eq('id', promptId)
+        .single()
+    
+    if (fetchError) {
+        console.error('Error fetching prompt:', fetchError)
+        throw fetchError
+    }
+
+    // Check if history exists
+    if (!currentPrompt.prompts.history) {
+        throw new Error('No history available to restore')
+    }
+
+    // Get user from localStorage
+    const user = getCurrentUser()
+
+    // Create new prompts structure - only swap the specific prompt type
+    const restoredPrompts: PromptsData = {
+        call_human: promptType === 'call_human' 
+            ? currentPrompt.prompts.history.call_human 
+            : currentPrompt.prompts.call_human,
+        company: promptType === 'company' 
+            ? currentPrompt.prompts.history.company 
+            : currentPrompt.prompts.company,
+        sales: promptType === 'sales' 
+            ? currentPrompt.prompts.history.sales 
+            : currentPrompt.prompts.sales,
+        history: {
+            call_human: promptType === 'call_human' 
+                ? currentPrompt.prompts.call_human 
+                : currentPrompt.prompts.history.call_human,
+            company: promptType === 'company' 
+                ? currentPrompt.prompts.company 
+                : currentPrompt.prompts.history.company,
+            sales: promptType === 'sales' 
+                ? currentPrompt.prompts.sales 
+                : currentPrompt.prompts.history.sales
+        }
+    }
+
+    // Update with restored version
+    const { error } = await supabase
+        .from('agent_prompts')
+        .update({
+            prompts: restoredPrompts,
+            updated_at: new Date().toISOString(),
+            updated_by: user?.email || user?.name || 'unknown'
+        })
+        .eq('id', promptId)
+
+    if (error) {
+        console.error('Error restoring from history:', error)
+        throw error
+    }
+
+    return { success: true, prompts: restoredPrompts }
 }

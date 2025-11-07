@@ -527,6 +527,7 @@
         display: flex;
         flex-direction: column;
         position: relative;
+        height: 400px;
     }
 
     .editor-menubar {
@@ -536,6 +537,7 @@
         gap: 4px;
         background-color: var(--color-232426);
         border-bottom: 1px solid var(--color-232426);
+        flex-shrink: 0;
     }
 
     .toolbar-group {
@@ -581,12 +583,13 @@
     .editor-content {
         flex: 1;
         padding: 16px;
-        min-height: 300px;
         color: var(--color-fff);
+        overflow-y: auto;
+        overflow-x: hidden;
     }
 
     :global(.rich-text-content) {
-        min-height: 300px;
+        min-height: 100%;
         outline: none;
         line-height: 1.5;
     }
