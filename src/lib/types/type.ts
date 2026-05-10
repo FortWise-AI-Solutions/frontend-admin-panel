@@ -108,6 +108,7 @@ export enum UserStatus {
 export enum Platform {
     WHATSAPP = 'WhatsApp',
     TELEGRAM = 'Telegram',
+    TELEGRAM_BUSINESS = 'Telegram Business',
     INSTAGRAM = 'Instagram'
 }
 

@@ -29,6 +29,7 @@
     export let activePlatform:
         | "WhatsApp"
         | "Telegram"
+        | "Telegram Business"
         | "Instagram"
         | "Messenger"
         | "Web"
@@ -57,6 +58,7 @@
     const platformMapping: Record<string, string[]> = {
         WhatsApp: ["WhatsApp", "whatsapp", "WHATSAPP"],
         Telegram: ["Telegram", "telegram", "TELEGRAM"],
+        "Telegram Business": ["Telegram Business", "telegram_business", "TELEGRAM_BUSINESS", "telegram business"],
         Instagram: ["Instagram", "instagram", "INSTAGRAM"],
         Messenger: ["Messenger", "messenger", "MESSENGER"],
         Web: ["Web", "web", "WEB"],

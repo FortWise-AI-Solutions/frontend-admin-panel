@@ -15,6 +15,7 @@
     type Platform =
         | "WhatsApp"
         | "Telegram"
+        | "Telegram Business"
         | "Instagram"
         | "Messenger"
         | "Web"
@@ -26,6 +27,9 @@
 
     let isMetaDropdownOpen: boolean = false;
     let metaDropdownRef: HTMLDivElement;
+
+    let isTelegramDropdownOpen: boolean = false;
+    let telegramDropdownRef: HTMLDivElement;
 
     let activePlatform: Platform = null;
     let activeStatus: Status = null;
@@ -43,8 +47,12 @@
         { name: "Messenger", icon: Messenger },
     ];
 
-    const otherPlatforms = [
+    const telegramPlatforms = [
         { name: "Telegram", icon: Telegram },
+        { name: "Telegram Business", icon: Telegram },
+    ];
+
+    const otherPlatforms = [
         { name: "Web", icon: Web },
     ];
 
@@ -62,6 +70,14 @@
         isMetaDropdownOpen = false;
     }
 
+    function toggleTelegramDropdown() {
+        isTelegramDropdownOpen = !isTelegramDropdownOpen;
+    }
+
+    function closeTelegramDropdown() {
+        isTelegramDropdownOpen = false;
+    }
+
     onMount(() => {
         // Ініціалізуємо WebSocket з'єднання для отримання нових повідомлень
         initializeWebSocket();
@@ -71,6 +87,12 @@
                 !metaDropdownRef.contains(event.target as Node)
             ) {
                 closeMetaDropdown();
+            }
+            if (
+                telegramDropdownRef &&
+                !telegramDropdownRef.contains(event.target as Node)
+            ) {
+                closeTelegramDropdown();
             }
         }
 
@@ -290,6 +312,10 @@
         userSelectRef.refreshUsers();
     }
 
+    $: isTelegramActive = telegramPlatforms.some(
+        (p) => activePlatform === p.name,
+    );
+
     $: activeFiltersCount = (activePlatform ? 1 : 0) + (activeStatus ? 1 : 0);
 
     $: totalUnreadCount = Object.values(unreadMessages).reduce(
@@ -409,6 +435,60 @@
                                     on:click={() => {
                                         selectFilter("platform", name);
                                         closeMetaDropdown();
+                                    }}
+                                    type="button"
+                                >
+                                    <div class="block-img">
+                                        <img src={icon} alt={name} />
+                                    </div>
+                                    <p class="block-text">{name}</p>
+                                </button>
+                            {/each}
+                        </div>
+                    {/if}
+                </div>
+
+                <!-- Telegram Platforms Dropdown -->
+                <div
+                    class="meta-dropdown-container"
+                    bind:this={telegramDropdownRef}
+                >
+                    <button
+                        class="block-content dropdown-trigger"
+                        class:active={isTelegramActive}
+                        on:click={toggleTelegramDropdown}
+                        type="button"
+                        aria-expanded={isTelegramDropdownOpen}
+                    >
+                        <div class="block-img">
+                            <img src={Telegram} alt="Telegram" />
+                        </div>
+                        <p class="block-text">Telegram</p>
+                        <svg
+                            class="dropdown-arrow"
+                            class:rotated={isTelegramDropdownOpen}
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                        >
+                            <path
+                                d="m6 9 6 6 6-6"
+                                stroke="currentColor"
+                                stroke-width="2"
+                            />
+                        </svg>
+                    </button>
+
+                    {#if isTelegramDropdownOpen}
+                        <div class="dropdown-menu">
+                            {#each telegramPlatforms as { name, icon }}
+                                <button
+                                    class="dropdown-item"
+                                    class:active={activePlatform === name}
+                                    on:click={() => {
+                                        selectFilter("platform", name);
+                                        closeTelegramDropdown();
                                     }}
                                     type="button"
                                 >
